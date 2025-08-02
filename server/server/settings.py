@@ -10,6 +10,8 @@ DEBUG = True
 
 ALLOWED_HOSTS = []
 
+ALLOWED_ADMIN_EMAILS = os.getenv("ALLOWED_ADMIN_EMAILS", "").split(",")
+
 INSTALLED_APPS = [
     'django.contrib.admin',
     'django.contrib.auth',
