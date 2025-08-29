@@ -1,25 +1,143 @@
-import React from "react";
+import React, { useState, useEffect } from "react";
+import axios from "axios";
 import { useNavigate } from "react-router-dom";
+import { ToastContainer, toast } from "react-toastify";
+import "react-toastify/dist/ReactToastify.css";
+
+import Header from "../../components/Header.jsx";
+import Disclaimer from "../../components/Disclaimer.jsx";
+import FeatureCard from "../../components/FeatureCard.jsx";
 
 const PatientDashboard = () => {
+  const [dashboardData, setDashboardData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const navigate = useNavigate();
 
-  const handleLogout = () => {
-    navigate("/patient-login");
-  };
+  useEffect(() => {
+    const fetchDashboardData = async () => {
+      try {
+        const token = localStorage.getItem("access_token");
+        if (!token) {
+          navigate("/patient/login");
+          return;
+        }
+        const response = await axios.get(
+          "http://127.0.0.1:8000/patient/dashboard/",
+          {
+            headers: { Authorization: `Bearer ${token}` },
+          }
+        );
+        setDashboardData(response.data);
+      } catch (err) {
+        if (err.response && err.response.status === 401) {
+          toast.error("Session expired. Please log in again.");
+          navigate("/patient/login");
+        } else {
+          setError("Failed to fetch dashboard data. Please try again.");
+          toast.error("Failed to fetch dashboard data.");
+        }
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchDashboardData();
+  }, [navigate]);
+
+  if (loading) {
+    return (
+      <div className="flex h-screen items-center justify-center text-lg text-gray-700">
+        Loading dashboard...
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="flex h-screen items-center justify-center text-lg text-red-600">
+        Error: {error}
+      </div>
+    );
+  }
 
   return (
-    <div className="flex flex-col items-center justify-center min-h-screen bg-gray-100">
-      <h1 className="text-3xl font-bold text-gray-800 mb-6">
-        Patient Dashboard
-      </h1>
+    <div className="min-h-screen bg-gray-50">
+      <ToastContainer position="top-center" autoClose={5000} />
+      <Header />
 
-      <button
-        onClick={handleLogout}
-        className="bg-red-500 text-white font-bold px-6 py-2 rounded-md hover:bg-red-600 transition"
-      >
-        Logout
-      </button>
+      <main className="mx-auto max-w-7xl px-4 py-10 sm:px-6 lg:px-8">
+        <section className="text-center">
+          <h1 className="text-4xl font-bold tracking-tight text-gray-900 sm:text-5xl">
+            Medical Diagnosis Assistant
+          </h1>
+          <p className="mx-auto mt-3 max-w-3xl text-base text-gray-600">
+            Advanced AI-powered medical image analysis and symptom assessment to
+            support clinical decision-making and treatment recommendations.
+          </p>
+        </section>
+
+        <div className="mt-8">
+          <Disclaimer />
+        </div>
+
+        <section className="mt-10 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+          <FeatureCard
+            title="Medical Image Upload"
+            description="Upload X-rays, CT scans, or MRI images for AI-powered analysis and disease detection."
+            cta="Upload Images"
+            onClick={() => navigate("/patient-dashboard/upload")}
+          />
+          <FeatureCard
+            title="Symptom Assessment"
+            description="Enter patient symptoms to receive potential differentials and suggested next steps."
+            cta="Enter Symptoms"
+            onClick={() => navigate("/patient-dashboard/symptoms")}
+          />
+          <FeatureCard
+            title="View Results"
+            description="Access previous diagnoses, download reports, and review recommendations."
+            cta="View Results"
+            onClick={() => navigate("/patient-dashboard/results")}
+          />
+        </section>
+
+        <section className="mt-16">
+          <h2 className="text-center text-3xl font-bold text-gray-900">
+            How It Works
+          </h2>
+          <div className="mt-8 grid items-start gap-8 sm:grid-cols-3">
+            <div className="text-center">
+              <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-gray-900 text-white">
+                1
+              </div>
+              <h3 className="mt-4 font-semibold text-gray-900">
+                Upload & Input
+              </h3>
+              <p className="mt-1 text-sm text-gray-600">
+                Upload medical images and enter patient symptoms.
+              </p>
+            </div>
+            <div className="text-center">
+              <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-gray-900 text-white">
+                2
+              </div>
+              <h3 className="mt-4 font-semibold text-gray-900">AI Analysis</h3>
+              <p className="mt-1 text-sm text-gray-600">
+                Advanced algorithms analyze the data for potential diagnoses.
+              </p>
+            </div>
+            <div className="text-center">
+              <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-gray-900 text-white">
+                3
+              </div>
+              <h3 className="mt-4 font-semibold text-gray-900">Get Results</h3>
+              <p className="mt-1 text-sm text-gray-600">
+                Receive detailed reports with recommendations.
+              </p>
+            </div>
+          </div>
+        </section>
+      </main>
     </div>
   );
 };

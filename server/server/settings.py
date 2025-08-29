@@ -1,6 +1,7 @@
 from pathlib import Path
 import os
 from dotenv import load_dotenv
+from datetime import timedelta
 
 load_dotenv()
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -11,6 +12,7 @@ DEBUG = True
 ALLOWED_HOSTS = []
 
 ALLOWED_ADMIN_EMAILS = os.getenv("ALLOWED_ADMIN_EMAILS", "").split(",")
+JWT_SECRET_KEY = 'something'
 
 INSTALLED_APPS = [
     'django.contrib.admin',
@@ -23,7 +25,6 @@ INSTALLED_APPS = [
     'rest_framework',
     'corsheaders',
     'patientsApp',
-    'rest_framework_simplejwt',
     'adminsApp',
     'doctorsApp',
 ]
@@ -39,10 +40,18 @@ MIDDLEWARE = [
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
 
-REST_FRAMEWORK = {
-    'DEFAULT_AUTHENTICATION_CLASSES': (
-        'rest_framework_simplejwt.authentication.JWTAuthentication',
-    ),
+SIMPLE_JWT = {
+    'ACCESS_TOKEN_LIFETIME': timedelta(days=1),
+    'REFRESH_TOKEN_LIFETIME': timedelta(days=7),
+    'ROTATE_REFRESH_TOKENS': False,
+    'BLACKLIST_AFTER_ROTATION': True,
+
+    'ALGORITHM': 'HS256',
+    'SIGNING_KEY': SECRET_KEY,
+    'VERIFYING_KEY': None,
+
+    'AUTH_HEADER_TYPES': ('Bearer',),
+    'AUTH_TOKEN_CLASSES': ('rest_framework_simplejwt.tokens.AccessToken',),
 }
 
 ROOT_URLCONF = 'server.urls'

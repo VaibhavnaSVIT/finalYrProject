@@ -153,45 +153,12 @@ def doctor_login(request):
     if not bcrypt.checkpw(password.encode('utf-8'), doctor["password"].encode('utf-8')):
         return Response({"error": "Invalid credentials"}, status=status.HTTP_401_UNAUTHORIZED)
 
-    otp = str(random.randint(100000, 999999))
-    doctors_otp_collection.update_one(
-        {"email": email},
-        {"$set": {"otp": otp, "doctor_id": str(doctor["_id"])}},
-        upsert=True,
-    )
+    custom_doctor = CustomUser(doctor)
+    tokens = get_tokens_for_doctor(custom_doctor)
 
-    subject = "Your OTP for Doctor Login"
-    message = f"Your OTP is: {otp}"
-
-    status_code, response = send_email(email, subject, message)
-
-    if status_code == 200:
-        return Response({"message": f"OTP sent: {otp} (for testing)"}, status=status.HTTP_200_OK)
-    else:
-        return Response({"error": "Failed to send OTP email"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    return Response({"message": "Login successful", "tokens": tokens}, status=status.HTTP_200_OK)
 
 class CustomUser:
     def __init__(self, doctor_data):
         self.id = str(doctor_data["_id"])
         self.email = doctor_data["personal_info"]["email"]
-
-@api_view(["POST"])
-def verify_doctor_login_otp(request):
-    data = request.data
-    email = data.get("email")
-    user_otp = data.get("otp")
-
-    stored_otp = doctors_otp_collection.find_one({"email": email})
-
-    if not stored_otp or stored_otp["otp"] != user_otp:
-        return Response({"error": "Invalid OTP"}, status=status.HTTP_400_BAD_REQUEST)
-
-    doctor_data = doctors_collection.find_one({"personal_info.email": email})
-    if not doctor_data:
-        return Response({"error": "Doctor Not Found"}, status=status.HTTP_404_NOT_FOUND)
-
-    doctors_otp_collection.delete_one({"email": email})
-    custom_doctor = CustomUser(doctor_data)
-    tokens = get_tokens_for_doctor(custom_doctor)
-
-    return Response({"message": "Login successful", "tokens": tokens}, status=status.HTTP_200_OK)
