@@ -1,5 +1,5 @@
 from datetime import datetime
-from bson import ObjectId
+from hashlib import md5
 import random, jwt
 from django.conf import settings
 from rest_framework.response import Response
@@ -7,7 +7,7 @@ from rest_framework.decorators import api_view, parser_classes
 from rest_framework.parsers import MultiPartParser, FormParser
 from rest_framework.exceptions import AuthenticationFailed
 from rest_framework import status
-from db_connections import patient_collection, patient_otp_collection, patient_medical_info
+from db_connections import patient_collection, patient_otp_collection, patient_medical_info, patient_medical_img_info
 import bcrypt
 from mailjetMailSender import send_email
 from rest_framework_simplejwt.tokens import RefreshToken
@@ -22,11 +22,7 @@ def get_tokens_for_user(user):
 @api_view(["POST"])
 def register_patient(request):
     data = request.data
-    name = data.get("name")
-    gender = data.get("gender")
-    dob = data.get("dob")
     email = str(data.get("email")).strip().lower()
-    phone = data.get("phone")
     password = data.get("password")
 
     if patient_collection.find_one({"email": email}):
@@ -64,7 +60,7 @@ def verify_otp(request):
     patient_data = stored_otp["patient_data"]
     patient_data["created_at"] = datetime.utcnow()
     patient_data['user_type'] = "patient"
-    patient_data['approval_status'] = "pending"
+    patient_data['admin_approval_status'] = "pending"
 
     result = patient_collection.insert_one(patient_data)
     patient_collection.update_one(
@@ -79,8 +75,7 @@ def verify_otp(request):
 def add_patient_medical_info(request):
     print("in add_patient_medical_info")
     data = request.data
-    user = request.user
-    email = str(user.email).strip().lower()
+    email = str(data.email).strip().lower()
 
     patient = patient_collection.find_one({"email": email})
     if not patient:
@@ -118,9 +113,7 @@ class CustomUser:
 
 @api_view(["GET"])
 def patient_dashboard(request):
-    print("in dashboard function")
     token = request.headers.get('Authorization')
-    print("token at patient dashboard: ", token)
     if not token:
         print("token missing")
         raise AuthenticationFailed('Token missing')
@@ -128,7 +121,6 @@ def patient_dashboard(request):
     try:
         token = token.split(" ")[1]
         decoded_token = jwt.decode(token, settings.SECRET_KEY, algorithms=["HS256"])
-        print("decoded_token = ", decoded_token)
         patient_id = decoded_token.get('user_id')
         
         if not patient_id:
@@ -140,8 +132,7 @@ def patient_dashboard(request):
         if not patient:
             print("patient not found")
             return Response({"error": "Patient not found"}, status=status.HTTP_404_NOT_FOUND)
-
-        # medical_records = list(patient_medical_info.find({"patient_id": str(patient["_id"])}))
+        
         medical_records = None
         dashboard_data = {
             "name": patient.get("name"),
@@ -149,70 +140,125 @@ def patient_dashboard(request):
             "dob": patient.get("dob"),
             "email": patient.get("email"),
             "phone": patient.get("phone"),
-            "approval_status": patient.get("approval_status", "pending"),
+            "doc_verification_status": patient.get("doc_verification_status", "pending"),
             "medical_info": medical_records,
         }
 
         return Response(dashboard_data, status=status.HTTP_200_OK)
 
     except jwt.ExpiredSignatureError:
-        print("token has expired")
         return Response({"error": "Token has expired"}, status=status.HTTP_401_UNAUTHORIZED)
     except jwt.DecodeError:
-        print("token is invalid")
         return Response({"error": "Token is invalid"}, status=status.HTTP_401_UNAUTHORIZED)
     except AuthenticationFailed as auth_err:
-        print("the error is: ",str(auth_err))
         return Response({"error": str(auth_err)}, status=status.HTTP_401_UNAUTHORIZED)
     except Exception as err:
-        print("error is : ", err)
         return Response({"error": "Internal server error"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 @api_view(["POST"])
 @parser_classes([MultiPartParser, FormParser])
 def upload_medical_image(request):
-    user = request.user
-    email = str(user.email).strip().lower()
-    file = request.FILES["image"]
+    data = request.data
+    print("user: ", data)
 
-    record = {
-        "patient_email": email,
-        "file_name": file.name,
-        "uploaded_at": datetime.utcnow(),
-        "status": "processing",
-        "analysis_type": "image"
-    }
-    patient_medical_info.insert_one(record)
-     # todo: send file to ML service for CNN analysis
-    return Response({"message": "Image uploaded successfully"}, status=status.HTTP_201_CREATED)
+    file = request.FILES.get("images")
+    token = request.headers.get('Authorization')
+
+    if not token:
+        print("token missing")
+        raise AuthenticationFailed('Token missing')
+
+    if not file:
+        return Response({"error": "No file uploaded under 'images' key"}, status=status.HTTP_400_BAD_REQUEST)
+
+    try:
+        token = token.split(" ")[1]
+        decoded_token = jwt.decode(token, settings.SECRET_KEY, algorithms=["HS256"])
+        patient_id = decoded_token.get('user_id')
+        email = patient_collection.find_one({"patient_id": patient_id}).get("email")
+
+        file_content = file.read()
+        file_hash = md5(file_content).hexdigest()
+
+        existing = patient_medical_img_info.find_one({
+            "patient_id": patient_id,
+            "file_hash": file_hash
+        })
+
+        if existing:
+            return Response({"error": "Duplicate image already uploaded."}, status=status.HTTP_409_CONFLICT)
+
+        record = {
+            "patient_email": email,
+            "file_name": file.name,
+            "content_type": file.content_type,
+            "file_data": file_content,
+            "file_hash": file_hash,
+            "uploaded_at": datetime.utcnow(),
+            "doc_verification_status": "pending",
+            "analysis_type": "image",
+            "patient_id": patient_id,
+        }
+
+        insert_result = patient_medical_img_info.insert_one(record)
+        patient_medical_img_info.update_one(
+            {"_id": insert_result.inserted_id},
+            {"$set": {"patient_medical_img_id": str(insert_result.inserted_id)}}
+        )
+
+        return Response({"message": "Image uploaded and stored successfully"}, status=status.HTTP_201_CREATED)
+
+    except jwt.ExpiredSignatureError:
+        return Response({"error": "Token has expired"}, status=status.HTTP_401_UNAUTHORIZED)
+    except jwt.InvalidTokenError:
+        return Response({"error": "Invalid token"}, status=status.HTTP_401_UNAUTHORIZED)
+    except Exception as e:
+        print("Upload failed:", str(e))
+        return Response({"error": "Internal server error"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 @api_view(["POST"])
 def symptom_assessment(request):
-    user = request.user
-    email = user.email
-    symptoms = request.data.get("symptoms", [])
+    try:
+        token = request.headers.get("Authorization", "").split(" ")[1]
+        decoded_token = jwt.decode(token, settings.SECRET_KEY, algorithms=["HS256"])
+        patient_id = decoded_token.get("user_id")
+        email = patient_collection.find_one({"patient_id": patient_id}).get("email")
+        data = request.data
+        patient_info = data.get("patient")
+        symptoms = data.get("symptoms")
 
-    # todo: call ML service for prediction
-    diagnosis = "Flu"
-    recommendation = "Consult a doctor, drink fluids, rest"
+        if not symptoms or not isinstance(symptoms, list) or not patient_info:
+            return Response({"error": "Invalid or missing data."}, status=status.HTTP_400_BAD_REQUEST)
 
-    record = {
-        "patient_email": email,
-        "created_at": datetime.utcnow(),
-        "symptoms": symptoms,
-        "diagnosis": diagnosis,
-        "recommendation": recommendation,
-        "analysis_type": "symptom"
-    }
-    patient_medical_info.insert_one(record)
+        record = {
+            "patient_id": patient_id,
+            "patient_email": email,
+            "patient_info": patient_info,
+            "symptoms": symptoms,
+            "submitted_at": datetime.utcnow(),
+            "doc_verification_status": "pending"
+        }
 
-    return Response(record, status=status.HTTP_200_OK)
+        insert_result = patient_medical_info.insert_one(record)
 
+        patient_medical_info.update_one(
+            {"_id": insert_result.inserted_id},
+            {"$set": {"patient_symptoms_id": str(insert_result.inserted_id)}}
+        )
+
+        return Response({"message": "Assessment submitted successfully."}, status=status.HTTP_201_CREATED)
+
+    except jwt.ExpiredSignatureError:
+        return Response({"error": "Token expired."}, status=status.HTTP_401_UNAUTHORIZED)
+    except jwt.InvalidTokenError:
+        return Response({"error": "Invalid token."}, status=status.HTTP_401_UNAUTHORIZED)
+    except Exception as e:
+        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 @api_view(["GET"])
 def get_results(request):
-    user = request.user
-    email = user.email
+    data = request.data
+    email = str(data.get("email")).strip().lower()
 
     results = list(patient_medical_info.find(
         {"patient_email": email},
@@ -220,3 +266,35 @@ def get_results(request):
     ))
 
     return Response({"results": results}, status=status.HTTP_200_OK)
+
+@api_view(["GET"])
+def patient_medical_history(request):
+    token = request.headers.get("Authorization", "").split(" ")[1]
+    decoded_token = jwt.decode(token, settings.SECRET_KEY, algorithms=["HS256"])
+    patient_id = decoded_token.get("user_id")
+
+
+    total_images = patient_medical_img_info.count_documents({"patient_id": patient_id})
+    pending_images = patient_medical_img_info.count_documents({"patient_id": patient_id, "status": "pending"})
+    approved_images = patient_medical_img_info.count_documents({"patient_id": patient_id, "status": "approved"})
+    rejected_images = patient_medical_img_info.count_documents({"patient_id": patient_id, "status": "rejected"})
+
+    total_symptoms = patient_medical_info.count_documents({"patient_id": patient_id})
+    pending_symptoms = patient_medical_info.count_documents({"patient_id": patient_id, "status": "pending"})
+    approved_symptoms = patient_medical_info.count_documents({"patient_id": patient_id, "status": "approved"})
+    rejected_symptoms = patient_medical_info.count_documents({"patient_id": patient_id, "status": "rejected"})
+
+    total_records = total_images + total_symptoms
+    pending_records = pending_images + pending_symptoms
+    approved_records = approved_images + approved_symptoms
+    rejected_records = rejected_images + rejected_symptoms
+
+    return Response(
+        {
+            "total_records": total_records,
+            "pending": pending_records,
+            "approved": approved_records,
+            "rejected": rejected_records,
+        },
+        status=status.HTTP_200_OK
+    )

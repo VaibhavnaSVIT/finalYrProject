@@ -1,6 +1,8 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
+import axios from "axios";
 import Header from "../../components/Header";
-import { Link } from "react-router-dom";
+import { toast } from "react-toastify";
+import { Link, useNavigate } from "react-router-dom";
 
 const STATUS_OPTIONS = ["All Statuses", "Approved", "Pending", "Rejected"];
 
@@ -12,14 +14,54 @@ const Tile = ({ label, value, colorClass }) => (
 );
 
 const HistoryPage = () => {
+  const navigate = useNavigate();
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState("All Statuses");
   const [loading, setLoading] = useState(false);
+  const [counts, setCounts] = useState({
+    total_records: 0,
+    approved: 0,
+    pending: 0,
+    rejected: 0,
+  });
+  useEffect(() => {
+    fetchCounts();
+  }, []);
+
+  const fetchCounts = async () => {
+    setLoading(true);
+    try {
+      const token = localStorage.getItem("access_token");
+      if (!token) {
+        toast.error("Please log in to view medical history.");
+        navigate("/patient-login");
+        return;
+      }
+      const response = await axios.get(
+        "http://127.0.0.1:8000/patient/medical-history-summary/",
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
+
+      setCounts({
+        total_records: response.data.total_records || 0,
+        approved: response.data.approved || 0,
+        pending: response.data.pending || 0,
+        rejected: response.data.rejected || 0,
+      });
+    } catch (error) {
+      console.error("Failed to fetch medical history counts:", error);
+      toast.error("Failed to load medical summary.");
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleRefresh = async () => {
-    // Hook up to backend later
-    setLoading(true);
-    setTimeout(() => setLoading(false), 600);
+    fetchCounts();
   };
 
   return (
@@ -98,10 +140,26 @@ const HistoryPage = () => {
         </div>
 
         <div className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <Tile label="Total Records" value={0} colorClass="text-gray-900" />
-          <Tile label="Approved" value={0} colorClass="text-emerald-600" />
-          <Tile label="Pending" value={0} colorClass="text-amber-600" />
-          <Tile label="Rejected" value={0} colorClass="text-rose-600" />
+          <Tile
+            label="Total Records"
+            value={counts.total_records}
+            colorClass="text-gray-900"
+          />
+          <Tile
+            label="Approved"
+            value={counts.approved}
+            colorClass="text-emerald-600"
+          />
+          <Tile
+            label="Pending"
+            value={counts.pending}
+            colorClass="text-amber-600"
+          />
+          <Tile
+            label="Rejected"
+            value={counts.rejected}
+            colorClass="text-rose-600"
+          />
         </div>
 
         <div className="mt-6 rounded-lg border border-gray-200 bg-white p-4 shadow-sm">

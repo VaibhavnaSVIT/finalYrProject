@@ -118,7 +118,7 @@ def register_doctor(request):
             print("Invalid or expired OTP")
             return Response({"error": "Invalid or expired OTP"}, status=status.HTTP_400_BAD_REQUEST)
 
-        verification_info["approval_status"] = "pending"
+        verification_info["admin_approval_status"] = "pending"
 
         hashed_password = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt())
         full_data = {
@@ -131,7 +131,11 @@ def register_doctor(request):
         }
 
         print("inserted data to db")
-        doctors_collection.insert_one(full_data)
+        result = doctors_collection.insert_one(full_data)
+        doctors_collection.update_one(
+            {"_id": result.inserted_id},
+            {"$set": {"doctor_id": str(result.inserted_id)}}
+        )
         doctors_otp_collection.delete_one({"email": email})
 
         return Response({"success": True, "message": "Registration successful"}, status=status.HTTP_201_CREATED)

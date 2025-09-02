@@ -8,6 +8,7 @@ client = MongoClient('mongodb://localhost:27017/')
 patientsDB = client['PatientsDB']
 patient_collection = patientsDB['patients']
 patient_medical_info = patientsDB['patient_meds']
+patient_medical_img_info = patientsDB['patient_img_info']
 patient_otp_collection = patientsDB['patientsOTP']
 
 doctorsDB = client['DoctorsDB']

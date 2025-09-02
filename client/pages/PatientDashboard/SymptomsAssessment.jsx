@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import Header from "../../components/Header";
+import axios from "axios";
 import { ToastContainer, toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 
@@ -27,7 +28,7 @@ const COMMON_SYMPTOMS = [
 ];
 
 const severities = ["Mild", "Moderate", "Severe", "Critical"];
-const genders = ["Male", "Female", "Other", "Prefer not to say"];
+const genders = ["Male", "Female"];
 
 const SymptomAssessmentPage = () => {
   const [patient, setPatient] = useState({
@@ -54,7 +55,7 @@ const SymptomAssessmentPage = () => {
     }
     setSymptoms((prev) => [
       ...prev,
-      { name: s, severity: "Mild", duration: "", notes: "" },
+      { name: s, severity: "Mild", duration: "ongoing", notes: "" },
     ]);
   };
 
@@ -83,19 +84,45 @@ const SymptomAssessmentPage = () => {
       toast.error("Please add at least one symptom.");
       return;
     }
-    // Assemble payload — integrate with backend later
-    const payload = { patient, symptoms };
-    console.log("Submitting assessment", payload);
-    toast.success("Assessment saved. You can connect this to the API next.");
+    try {
+      const token = localStorage.getItem("access_token");
+      const res = await axios.post(
+        "http://127.0.0.1:8000/patient/symptom-assessment/",
+        {
+          patient,
+          symptoms,
+        },
+        {
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
+      toast.success("Assessment submitted successfully.");
+      console.log(res.data);
+      setSymptoms([]);
+      setPatient({
+        age: "",
+        gender: "",
+        history: "",
+        medications: "",
+        allergies: "",
+      });
+    } catch (err) {
+      const message =
+        err.response?.data?.error || "Something went wrong. Please try again.";
+      toast.error(message);
+      console.error(err);
+    }
   };
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <ToastContainer position="top-center" autoClose={4000} />
+      <ToastContainer position="top-right" autoClose={4000} />
       <Header />
 
       <main className="mx-auto max-w-5xl px-4 py-10 sm:px-6 lg:px-8">
-        {/* Title */}
         <section className="text-center">
           <h1 className="text-4xl font-bold text-gray-900">
             Symptom Assessment

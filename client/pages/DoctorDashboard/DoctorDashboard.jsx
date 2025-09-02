@@ -5,6 +5,7 @@ const DoctorDashboard = () => {
   const navigate = useNavigate();
 
   const handleLogout = () => {
+    localStorage.removeItem("access_token");
     navigate("/doctor-login");
   };
   return (

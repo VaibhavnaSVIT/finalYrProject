@@ -8,8 +8,6 @@ const AdminLogin = () => {
   const navigate = useNavigate();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [otp, setOtp] = useState("");
-  const [isOtpSent, setIsOtpSent] = useState(false);
 
   const handleLogin = async (e) => {
     e.preventDefault();
@@ -23,36 +21,17 @@ const AdminLogin = () => {
       );
       console.log("Admin Login Response:", response.data);
 
-      if (response.data.message) {
-        setIsOtpSent(true);
+      const token = response.data.tokens?.access;
+
+      if (token) {
+        localStorage.setItem("adminToken", token);
+        navigate("/admin-dashboard");
+      } else {
+        toast.error("Login failed: No token received");
       }
     } catch (error) {
       console.error("Admin Login Error:", error.response?.data);
       toast.error(error.response?.data?.error || "Login failed");
-    }
-  };
-
-  const handleVerifyOtp = async (e) => {
-    e.preventDefault();
-    try {
-      const response = await axios.post(
-        "http://127.0.0.1:8000/admin/api/verify-login-otp/",
-        {
-          email,
-          otp,
-        }
-      );
-      const token = response.data.tokens?.access;
-      console.log("Admin OTP Verified, Token:", token);
-
-      if (token) {
-        navigate("/admin-dashboard");
-      } else {
-        toast.error("OTP verification failed: No token received");
-      }
-    } catch (error) {
-      console.error("Admin OTP Error:", error.response?.data);
-      toast.error(error.response?.data?.error || "OTP verification failed");
     }
   };
 
@@ -66,86 +45,49 @@ const AdminLogin = () => {
           Back
         </button>
 
-        {!isOtpSent ? (
-          <>
-            <h2 className="text-2xl font-bold text-center mb-6 text-gray-800">
-              Admin Login
-            </h2>
-            <form onSubmit={handleLogin} className="space-y-4">
-              <div>
-                <label className="block text-gray-700 font-medium mb-1">
-                  Email Address
-                </label>
-                <input
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="Enter your email"
-                  required
-                  className="w-full p-2 border rounded-md focus:ring-2 focus:ring-blue-400 focus:outline-none"
-                />
-              </div>
-              <div>
-                <label className="block text-gray-700 font-medium mb-1">
-                  Password
-                </label>
-                <input
-                  type="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="Enter your password"
-                  required
-                  className="w-full p-2 border rounded-md focus:ring-2 focus:ring-blue-400 focus:outline-none"
-                />
-              </div>
-              <button
-                type="submit"
-                className="w-full bg-blue-600 text-white font-bold p-2 rounded-md hover:bg-blue-700 transition"
-              >
-                Login
-              </button>
-              <p className="mt-4 text-center">
-                Don't have an account?{" "}
-                <Link
-                  to="/admin-signup"
-                  className="text-blue-600 hover:underline"
-                >
-                  Admin Sign up
-                </Link>
-              </p>
-            </form>
-          </>
-        ) : (
-          <>
-            <h2 className="text-2xl font-bold text-center mb-6 text-gray-800">
-              Verify OTP
-            </h2>
-            <form onSubmit={handleVerifyOtp} className="space-y-4">
-              <div>
-                <label className="block text-gray-700 font-medium mb-1">
-                  Enter OTP
-                </label>
-                <input
-                  type="text"
-                  value={otp}
-                  onChange={(e) => {
-                    if (/^\d{0,6}$/.test(e.target.value))
-                      setOtp(e.target.value);
-                  }}
-                  placeholder="Enter OTP"
-                  required
-                  className="w-full p-2 border rounded-md focus:ring-2 focus:ring-green-400 focus:outline-none"
-                />
-              </div>
-              <button
-                type="submit"
-                className="w-full bg-green-500 text-white font-bold p-2 rounded-md hover:bg-green-600 transition"
-              >
-                Verify OTP
-              </button>
-            </form>
-          </>
-        )}
+        <h2 className="text-2xl font-bold text-center mb-6 text-gray-800">
+          Admin Login
+        </h2>
+        <form onSubmit={handleLogin} className="space-y-4">
+          <div>
+            <label className="block text-gray-700 font-medium mb-1">
+              Email Address
+            </label>
+            <input
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="Enter your email"
+              required
+              className="w-full p-2 border rounded-md focus:ring-2 focus:ring-blue-400 focus:outline-none"
+            />
+          </div>
+          <div>
+            <label className="block text-gray-700 font-medium mb-1">
+              Password
+            </label>
+            <input
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="Enter your password"
+              required
+              className="w-full p-2 border rounded-md focus:ring-2 focus:ring-blue-400 focus:outline-none"
+            />
+          </div>
+          <button
+            type="submit"
+            className="w-full bg-blue-600 text-white font-bold p-2 rounded-md hover:bg-blue-700 transition"
+          >
+            Login
+          </button>
+          <p className="mt-4 text-center">
+            Don't have an account?{" "}
+            <Link to="/admin-signup" className="text-blue-600 hover:underline">
+              Admin Sign up
+            </Link>
+          </p>
+        </form>
       </div>
     </div>
   );

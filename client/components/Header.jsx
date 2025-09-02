@@ -1,21 +1,56 @@
-import React, { useMemo } from "react";
+import React, { useState, useEffect } from "react";
 import { Link, NavLink, useNavigate } from "react-router-dom";
+import axios from "axios";
 
 const Header = () => {
   const navigate = useNavigate();
-  const displayName = useMemo(
-    () =>
+
+  const [user, setUser] = useState({
+    name:
       localStorage.getItem("user_name") ||
       localStorage.getItem("patient_name") ||
       "Patient",
-    []
-  );
-  const email = useMemo(() => localStorage.getItem("user_email") || "", []);
+    email: localStorage.getItem("user_email") || "",
+  });
 
   const linkClasses = ({ isActive }) =>
     isActive
       ? "flex items-center gap-2 px-3 py-2 rounded-md bg-black text-white"
       : "flex items-center gap-2 px-3 py-2 rounded-md text-gray-700 hover:bg-gray-200 transition";
+
+  useEffect(() => {
+    async function fetchUserData() {
+      const token = localStorage.getItem("access_token");
+      if (!token) {
+        navigate("/patient-login");
+        return;
+      }
+      try {
+        const response = await axios.get(
+          "http://127.0.0.1:8000/patient/dashboard/",
+          {
+            headers: {
+              Authorization: `Bearer ${token}`,
+            },
+          }
+        );
+        if (response.data) {
+          setUser({
+            name: response.data.name || user.name,
+            email: response.data.email || user.email,
+          });
+          localStorage.setItem("user_name", response.data.name || user.name);
+          localStorage.setItem("user_email", response.data.email || user.email);
+        }
+      } catch (error) {
+        if (error.response && error.response.status === 401) {
+          handleLogout();
+        }
+      }
+    }
+
+    fetchUserData();
+  }, []);
 
   const handleLogout = () => {
     localStorage.removeItem("access_token");
@@ -126,14 +161,15 @@ const Header = () => {
           <div className="flex items-center gap-4">
             <div className="hidden text-right sm:block">
               <div className="text-sm font-semibold leading-tight text-gray-900">
-                {displayName}
+                {user.name}
               </div>
-              {email && (
+              {user.email && (
                 <div className="text-xs leading-tight text-gray-500">
-                  {email}
+                  {user.email}
                 </div>
               )}
             </div>
+
             <button
               onClick={handleLogout}
               className="rounded-md bg-gray-900 px-3 py-2 text-sm font-semibold text-white hover:bg-gray-800"

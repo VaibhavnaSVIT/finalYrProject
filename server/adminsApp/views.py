@@ -1,12 +1,13 @@
 from datetime import datetime
-import random, os
+import random, json
+from bson import ObjectId, json_util
 import bcrypt
 from dotenv import load_dotenv
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
 from rest_framework import status
 from rest_framework_simplejwt.tokens import RefreshToken
-from db_connections import admin_collection, admin_otp_collection
+from db_connections import admin_collection, admin_otp_collection, doctors_collection, patient_collection
 from mailjetMailSender import send_email
 from django.conf import settings
 
@@ -87,44 +88,122 @@ def admin_login(request):
     if not bcrypt.checkpw(password.encode('utf-8'), admin["password"].encode('utf-8')):
         return Response({"error": "Invalid credentials"}, status=status.HTTP_401_UNAUTHORIZED)
 
-    otp = str(random.randint(100000, 999999))
-    admin_otp_collection.update_one(
-        {"email": email},
-        {"$set": {"otp": otp, "admin_id": str(admin["_id"])}},
-        upsert=True,
-    )
+    custom_admin = CustomAdmin(admin)
+    tokens = get_tokens_for_admin(custom_admin)
 
-    subject = "Your OTP for Admin Login"
-    message = f"Your OTP is: {otp}"
-
-    status_code, response = send_email(email, subject, message)
-    if status_code == 200:
-        return Response({"message": f"OTP sent: {otp} (for testing)"}, status=status.HTTP_200_OK)
-    else:
-        return Response({"error": "Failed to send OTP email"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    return Response({"message": "Login successful", "tokens": tokens}, status=status.HTTP_200_OK)
 
 class CustomAdmin:
     def __init__(self, user_data):
         self.id = str(user_data["_id"])
         self.email = user_data["email"]
 
+@api_view(["GET"])
+def get_pending_doctors(request):
+    try:
+        pending_docs_cursor = doctors_collection.find(
+            {"verification_info.admin_approval_status": "pending"}
+        )
+        pending_doctors = list(pending_docs_cursor)
+
+        pending_doctors_serialized = json_util.dumps(pending_doctors)
+        pending_doctors_data = json.loads(pending_doctors_serialized)
+
+        return Response(pending_doctors_data, status=status.HTTP_200_OK)
+    except Exception as e:
+        return Response({"error": f"Failed to fetch doctors: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    
 @api_view(["POST"])
-def verify_admin_login_otp(request):
+def approve_doctor(request):
     data = request.data
-    email = data.get("email")
-    user_otp = data.get("otp")
+    doctor_id = data.get("doctor_id")
 
-    stored_otp = admin_otp_collection.find_one({"email": email})
+    if not doctor_id:
+        return Response({"error": "Doctor ID is required"}, status=status.HTTP_400_BAD_REQUEST)
 
-    if not stored_otp or stored_otp["otp"] != user_otp:
-        return Response({"error": "Invalid OTP"}, status=status.HTTP_400_BAD_REQUEST)
+    try:
+        result = doctors_collection.update_one(
+            {"doctor_id": doctor_id},
+            {"$set": {"verification_info.admin_approval_status": "approved"}}
+        )
 
-    admin = admin_collection.find_one({"email": email})
-    if not admin:
-        return Response({"error": "Admin not found"}, status=status.HTTP_404_NOT_FOUND)
+        if result.matched_count == 0:
+            return Response({"error": "Doctor not found"}, status=status.HTTP_404_NOT_FOUND)
+        return Response({"message": "Doctor approved successfully"}, status=status.HTTP_200_OK)
 
-    admin_otp_collection.delete_one({"email": email})
-    custom_admin = CustomAdmin(admin)
-    tokens = get_tokens_for_admin(custom_admin)
+    except Exception as e:
+        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-    return Response({"message": "Login successful", "tokens": tokens}, status=status.HTTP_200_OK)
+@api_view(["POST"])
+def reject_doctor(request):
+    data = request.data
+    doctor_id = data.get("doctor_id")
+
+    if not doctor_id:
+        return Response({"error": "Doctor ID is required"}, status=status.HTTP_400_BAD_REQUEST)
+
+    try:
+        result = doctors_collection.delete_one({"doctor_id": doctor_id})
+
+        if result.deleted_count == 0:
+            return Response({"error": "Doctor not found or already deleted"}, status=status.HTTP_404_NOT_FOUND)
+
+        return Response({"message": "Doctor rejected and deleted successfully"}, status=status.HTTP_200_OK)
+
+    except Exception as e:
+        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    
+@api_view(["GET"])
+def get_pending_patients(request):
+    try:
+        pending_patients_cursor = patient_collection.find(
+            {"admin_approval_status": "pending"}
+        )
+        pending_doctors = list(pending_patients_cursor)
+
+        pending_patients_serialized = json_util.dumps(pending_doctors)
+        pending_patients_data = json.loads(pending_patients_serialized)
+
+        return Response(pending_patients_data, status=status.HTTP_200_OK)
+    except Exception as e:
+        return Response({"error": f"Failed to fetch doctors: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+@api_view(["POST"])
+def approve_patient(request):
+    data = request.data
+    patient_id = data.get("patient_id")
+
+    if not patient_id:
+        return Response({"error": "Patient ID is required"}, status=status.HTTP_400_BAD_REQUEST)
+
+    try:
+        result = patient_collection.update_one(
+            {"patient_id": patient_id},
+            {"$set": {"admin_approval_status": "approved"}}
+        )
+
+        if result.matched_count == 0:
+            return Response({"error": "Patient not found"}, status=status.HTTP_404_NOT_FOUND)
+        return Response({"message": "Patient approved successfully"}, status=status.HTTP_200_OK)
+
+    except Exception as e:
+        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    
+@api_view(["POST"])
+def reject_patient(request):
+    data = request.data
+    patient_id = data.get("patient_id")
+
+    if not patient_id:
+        return Response({"error": "Patient ID is required"}, status=status.HTTP_400_BAD_REQUEST)
+
+    try:
+        result = patient_collection.delete_one({"patient_id": patient_id})
+
+        if result.deleted_count == 0:
+            return Response({"error": "Patient not found or already deleted"}, status=status.HTTP_404_NOT_FOUND)
+
+        return Response({"message": "Patient rejected and deleted successfully"}, status=status.HTTP_200_OK)
+
+    except Exception as e:
+        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
