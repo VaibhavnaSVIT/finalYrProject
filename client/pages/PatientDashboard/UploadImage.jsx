@@ -1,9 +1,9 @@
 import React, { useState } from "react";
 import axios from "axios";
-import Header from "../../components/Header";
+import PatientHeader from "../../components/PatientHeader.jsx";
 import DropArea from "../../components/DropArea";
 import { ToastContainer, toast } from "react-toastify";
-import "react-toastify/dist/ReactToastify.css";
+import Disclaimer from "../../components/Disclaimer.jsx";
 
 const MAX_SIZE = 10 * 1024 * 1024;
 const ALLOWED = [
@@ -77,15 +77,14 @@ const UploadPage = () => {
   return (
     <div className="min-h-screen bg-gray-50">
       <ToastContainer position="top-right" autoClose={2000} />
-      <Header />
+      <PatientHeader />
       <main className="mx-auto max-w-5xl px-4 py-10 sm:px-6 lg:px-8">
         <section className="text-center">
           <h1 className="text-4xl font-bold text-gray-900">
             Medical Image Upload
           </h1>
           <p className="mt-2 text-gray-600">
-            Upload medical images for AI-powered analysis and diagnosis
-            assistance
+            Model predicts images of skin diseases and oral disorders.
           </p>
         </section>
         <div className="mt-6">
@@ -96,27 +95,23 @@ const UploadPage = () => {
               per image.
             </p>
           </div>
+          <div className="mt-6">
+            <Disclaimer />
+          </div>
         </div>
         <section className="mt-8 rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
           <h2 className="text-lg font-semibold text-gray-900">
-            Upload Medical Images
+            Upload Medical Images (Skin disease, Oral disorders)
           </h2>
           <p className="mt-1 text-sm text-gray-600">
-            Supported formats: JPEG, PNG, DICOM. Each image will be processed by
-            our CNN models.
+            Supported formats: JPEG, PNG, WEBP, JPG.
           </p>
           <div className="mt-3 flex flex-wrap gap-2 text-xs">
             <span className="rounded-full bg-gray-100 px-2 py-1 text-black">
-              <b>X-Ray</b>
+              Skin diseases includes eczema or bening keratosis like lesions.
             </span>
             <span className="rounded-full bg-gray-100 px-2 py-1 text-black">
-              <b>CT Scan</b>
-            </span>
-            <span className="rounded-full bg-gray-100 px-2 py-1 text-black">
-              <b>MRI</b>
-            </span>
-            <span className="rounded-full bg-gray-100 px-2 py-1 text-black">
-              <b>Ultrasound</b>
+              Oral disorders includes hypodontis or mouth ulcers.
             </span>
           </div>
           <div className="mt-6">

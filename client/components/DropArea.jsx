@@ -1,4 +1,5 @@
 import React, { useCallback, useState } from "react";
+import FileUploadOutlinedIcon from "@mui/icons-material/FileUploadOutlined";
 
 const DropArea = ({ onFiles }) => {
   const [isOver, setIsOver] = useState(false);
@@ -34,21 +35,12 @@ const DropArea = ({ onFiles }) => {
         isOver ? "border-gray-900 bg-gray-50" : "border-gray-300"
       }`}
     >
-      <svg
-        className="h-10 w-10 text-gray-500"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-      >
-        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-        <polyline points="7 10 12 5 17 10" />
-        <line x1="12" y1="5" x2="12" y2="20" />
-      </svg>
+      <FileUploadOutlinedIcon fontSize="large" />
       <p className="mt-4 text-base font-medium text-gray-900">
         Drop medical images here or click to browse
       </p>
       <p className="mt-1 text-xs text-gray-500">
-        Supports JPEG, PNG, and DICOM formats up to 10MB each
+        Supports JPEG, PNG, WEBP, JPG formats up to 10MB each
       </p>
       <button
         type="button"

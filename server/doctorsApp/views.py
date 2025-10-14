@@ -4,7 +4,9 @@ from rest_framework.response import Response
 from rest_framework.decorators import api_view
 from rest_framework import status
 from db_connections import doctors_collection, doctors_otp_collection
-import bcrypt
+import bcrypt, jwt
+from rest_framework.exceptions import AuthenticationFailed
+
 from rest_framework_simplejwt.tokens import RefreshToken
 from mailjetMailSender import send_email
 import os
@@ -43,7 +45,7 @@ def upload_doctor_files(request):
 
     profile_photo = files.get("profilePhoto")
     if profile_photo:
-        path = handle_uploaded_file(profile_photo, "doctor_photos", f"{email}_profile.{profile_photo.name.split('.')[-1]}")
+        path = handle_uploaded_file(profile_photo, "documents", f"{email}_profile.{profile_photo.name.split('.')[-1]}")
         updated_fields["personal_info.profilePhoto"] = path
 
     degree_cert = files.get("degree_certificate")
@@ -166,3 +168,44 @@ class CustomUser:
     def __init__(self, doctor_data):
         self.id = str(doctor_data["_id"])
         self.email = doctor_data["personal_info"]["email"]
+
+@api_view(["GET"])
+def doctor_dashboard(request):
+    token = request.headers.get("Authorization")
+    if not token:
+        print("Token missing")
+        raise AuthenticationFailed('Token missing')
+    
+    try:
+        token = token.split(" ")[1]
+        decoded_token = jwt.decode(token, settings.SECRET_KEY, algorithms=["HS256"])
+        doctor_id = decoded_token.get('user_id')
+
+        if not doctor_id:
+            print("No doctor ID found in token")
+            raise AuthenticationFailed('Doctor ID not found in token')
+        
+        doctor = doctors_collection.find_one({"doctor_id": doctor_id})
+        if not doctor:
+            print("Doctor not found")
+            return Response({"error": "Doctor not found"}, status=status.HTTP_404_NOT_FOUND)
+
+        personal_info = doctor.get("personal_info", {})
+        
+        doctor_dashboard_data = {
+            "name": personal_info.get("fullName"),
+            "email": personal_info.get("email"),
+        }
+
+        return Response(doctor_dashboard_data, status=status.HTTP_200_OK)
+
+    except jwt.ExpiredSignatureError:
+        return Response({"error": "Token has expired"}, status=status.HTTP_401_UNAUTHORIZED)
+    except jwt.DecodeError:
+        return Response({"error": "Token is invalid"}, status=status.HTTP_401_UNAUTHORIZED)
+    except AuthenticationFailed as auth_err:
+        return Response({"error": str(auth_err)}, status=status.HTTP_401_UNAUTHORIZED)
+    except Exception as err:
+        print(f"Unexpected error: {err}")
+        return Response({"error": "Internal server error"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+

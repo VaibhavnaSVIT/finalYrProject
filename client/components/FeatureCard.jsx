@@ -12,8 +12,6 @@ const FeatureCard = ({ title, description, cta, onClick }) => {
       >
         {cta}
       </button>
-
-      {/* subtle accent ring on hover */}
       <span className="pointer-events-none absolute inset-0 rounded-xl ring-1 ring-transparent transition group-hover:ring-gray-900/5" />
     </div>
   );

@@ -1,10 +1,13 @@
 import React, { useState, useEffect } from "react";
 import axios from "axios";
-import Header from "../../components/Header";
+import PatientHeader from "../../components/PatientHeader.jsx";
 import { toast } from "react-toastify";
 import { Link, useNavigate } from "react-router-dom";
+import Disclaimer from "../../components/Disclaimer.jsx";
+import CachedOutlinedIcon from "@mui/icons-material/CachedOutlined";
+import ReportProblemOutlinedIcon from "@mui/icons-material/ReportProblemOutlined";
 
-const STATUS_OPTIONS = ["All Statuses", "Approved", "Pending", "Rejected"];
+const STATUS_OPTIONS = ["All Statuses", "Approved", "Pending"];
 
 const Tile = ({ label, value, colorClass }) => (
   <div className="rounded-xl border border-gray-200 bg-white p-5 text-center shadow-sm">
@@ -22,7 +25,6 @@ const HistoryPage = () => {
     total_records: 0,
     approved: 0,
     pending: 0,
-    rejected: 0,
   });
   useEffect(() => {
     fetchCounts();
@@ -50,7 +52,6 @@ const HistoryPage = () => {
         total_records: response.data.total_records || 0,
         approved: response.data.approved || 0,
         pending: response.data.pending || 0,
-        rejected: response.data.rejected || 0,
       });
     } catch (error) {
       console.error("Failed to fetch medical history counts:", error);
@@ -66,7 +67,7 @@ const HistoryPage = () => {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <Header />
+      <PatientHeader />
 
       <main className="mx-auto max-w-6xl px-4 py-8 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between gap-3">
@@ -75,7 +76,7 @@ const HistoryPage = () => {
               Medical History
             </h1>
             <p className="mt-1 text-sm text-gray-600">
-              View previous diagnoses, recommendations, and doctor reviews
+              View previous medications, diagnoses, and doctor suggestions.
             </p>
           </div>
 
@@ -84,19 +85,13 @@ const HistoryPage = () => {
             className="inline-flex items-center gap-2 rounded-lg bg-gray-900 px-4 py-2 text-sm font-semibold text-white hover:bg-gray-800 disabled:opacity-50"
             disabled={loading}
           >
-            <svg
-              className="h-4 w-4"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-            >
-              <path d="M23 4v6h-6" />
-              <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />
-            </svg>
+            <CachedOutlinedIcon />
             {loading ? "Refreshing..." : "Refresh"}
           </button>
         </div>
-
+        <div className="mt-6">
+          <Disclaimer />
+        </div>
         <div className="mt-6 rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
           <div className="flex flex-col gap-3 sm:flex-row">
             <div className="relative grow">
@@ -139,7 +134,7 @@ const HistoryPage = () => {
           </div>
         </div>
 
-        <div className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           <Tile
             label="Total Records"
             value={counts.total_records}
@@ -155,27 +150,11 @@ const HistoryPage = () => {
             value={counts.pending}
             colorClass="text-amber-600"
           />
-          <Tile
-            label="Rejected"
-            value={counts.rejected}
-            colorClass="text-rose-600"
-          />
         </div>
 
         <div className="mt-6 rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
           <div className="flex items-start gap-2 text-sm text-gray-600">
-            <svg
-              className="mt-0.5 h-5 w-5 text-gray-500"
-              viewBox="0 0 20 20"
-              fill="currentColor"
-              aria-hidden="true"
-            >
-              <path
-                fillRule="evenodd"
-                d="M8.257 3.099a1.5 1.5 0 012.486 0l6.3 10.03A1.5 1.5 0 0115.8 15H4.2a1.5 1.5 0 01-1.244-2.871l5.3-9.03zM11 14a1 1 0 10-2 0 1 1 0 002 0zm-1-2a1 1 0 01-1-1V8a1 1 0 112 0v3a1 1 0 01-1 1z"
-                clipRule="evenodd"
-              />
-            </svg>
+            <ReportProblemOutlinedIcon className="text-gray-600" />
             <p>No medical records found matching your criteria.</p>
           </div>
         </div>

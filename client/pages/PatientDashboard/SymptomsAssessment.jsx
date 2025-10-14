@@ -1,44 +1,46 @@
 import React, { useState } from "react";
-import Header from "../../components/Header";
+import PatientHeader from "../../components/PatientHeader.jsx";
 import axios from "axios";
+import Disclaimer from "../../components/Disclaimer.jsx";
 import { ToastContainer, toast } from "react-toastify";
-import "react-toastify/dist/ReactToastify.css";
+import MonitorHeartOutlinedIcon from "@mui/icons-material/MonitorHeartOutlined";
 
 const COMMON_SYMPTOMS = [
-  "Fever",
-  "Headache",
-  "Cough",
-  "Fatigue",
-  "Nausea",
-  "Chest Pain",
-  "Shortness of Breath",
-  "Dizziness",
-  "Joint Pain",
-  "Abdominal Pain",
-  "Skin Rash",
-  "Sore Throat",
-  "Muscle Pain",
-  "Back Pain",
-  "Weight Loss",
-  "Night Sweats",
-  "Loss of Appetite",
-  "Confusion",
-  "Vomiting",
-  "Diarrhea",
+  "muscle_pain",
+  "family_history",
+  "itching",
+  "altered_sensorium",
+  "chest_pain",
+  "dark_urine",
+  "mild_fever",
+  "joint_pain",
+  "mucoid_sputum",
+  "yellowing_of_eyes",
+  "stomach_pain",
+  "sweating",
+  "loss_of_appetite",
+  "fatigue",
+  "high_fever",
+  "weight_loss",
+  "rusty_sputum",
+  "lack_of_concentration",
+  "muscle_weakness",
+  "vomiting",
+  "diarrhoea",
+  "red_spots_over_body",
+  "headache",
+  "chills",
+  "nodal_skin_eruptions",
+  "internal_itching",
+  "unsteadiness",
+  "passage_of_gases",
+  "loss_of_balance",
+  "nausea",
 ];
 
 const severities = ["Mild", "Moderate", "Severe", "Critical"];
-const genders = ["Male", "Female"];
 
 const SymptomAssessmentPage = () => {
-  const [patient, setPatient] = useState({
-    age: "",
-    gender: "",
-    history: "",
-    medications: "",
-    allergies: "",
-  });
-
   const [entry, setEntry] = useState({
     name: "",
     severity: "",
@@ -89,7 +91,6 @@ const SymptomAssessmentPage = () => {
       const res = await axios.post(
         "http://127.0.0.1:8000/patient/symptom-assessment/",
         {
-          patient,
           symptoms,
         },
         {
@@ -102,13 +103,6 @@ const SymptomAssessmentPage = () => {
       toast.success("Assessment submitted successfully.");
       console.log(res.data);
       setSymptoms([]);
-      setPatient({
-        age: "",
-        gender: "",
-        history: "",
-        medications: "",
-        allergies: "",
-      });
     } catch (err) {
       const message =
         err.response?.data?.error || "Something went wrong. Please try again.";
@@ -120,7 +114,7 @@ const SymptomAssessmentPage = () => {
   return (
     <div className="min-h-screen bg-gray-50">
       <ToastContainer position="top-right" autoClose={4000} />
-      <Header />
+      <PatientHeader />
 
       <main className="mx-auto max-w-5xl px-4 py-10 sm:px-6 lg:px-8">
         <section className="text-center">
@@ -128,135 +122,23 @@ const SymptomAssessmentPage = () => {
             Symptom Assessment
           </h1>
           <p className="mt-2 text-gray-600">
-            Enter patient symptoms and medical information for AI-powered
-            clinical analysis
+            Enter patient symptoms and medical information for disease
+            prediction.
           </p>
         </section>
 
-        <div className="mt-6 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
-          This assessment uses advanced NLP and machine learning models for
-          symptom analysis. Results should be reviewed by qualified medical
-          professionals.
+        <div className="mt-6">
+          <Disclaimer />
         </div>
 
         <section className="mt-8 rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
           <div className="flex items-center gap-2">
-            <span className="inline-flex h-5 w-5 items-center justify-center rounded-md bg-gray-900 text-white">
-              i
-            </span>
-            <h2 className="text-lg font-semibold text-gray-900">
-              Patient Information
-            </h2>
-          </div>
-          <p className="mt-1 text-sm text-gray-600">
-            Demographic and medical history data improves diagnostic accuracy
-          </p>
+            <MonitorHeartOutlinedIcon />
 
-          <div className="mt-6 grid gap-4 sm:grid-cols-2">
-            <div>
-              <label className="block text-sm font-medium text-gray-700">
-                Age
-              </label>
-              <input
-                type="number"
-                min="0"
-                placeholder="Patient age"
-                className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none ring-gray-900/10 focus:ring-2"
-                value={patient.age}
-                onChange={(e) =>
-                  setPatient((p) => ({ ...p, age: e.target.value }))
-                }
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700">
-                Gender
-              </label>
-              <select
-                className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none ring-gray-900/10 focus:ring-2"
-                value={patient.gender}
-                onChange={(e) =>
-                  setPatient((p) => ({ ...p, gender: e.target.value }))
-                }
-              >
-                <option value="">Select gender</option>
-                {genders.map((g) => (
-                  <option key={g} value={g}>
-                    {g}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className="sm:col-span-2">
-              <label className="block text-sm font-medium text-gray-700">
-                Medical History
-              </label>
-              <input
-                type="text"
-                placeholder="Previous diagnoses, surgeries, chronic conditions..."
-                className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none ring-gray-900/10 focus:ring-2"
-                value={patient.history}
-                onChange={(e) =>
-                  setPatient((p) => ({ ...p, history: e.target.value }))
-                }
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700">
-                Current Medications
-              </label>
-              <input
-                type="text"
-                placeholder="Medication names (comma-separated)"
-                className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none ring-gray-900/10 focus:ring-2"
-                value={patient.medications}
-                onChange={(e) =>
-                  setPatient((p) => ({ ...p, medications: e.target.value }))
-                }
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700">
-                Known Allergies
-              </label>
-              <input
-                type="text"
-                placeholder="Drug/food allergies (comma-separated)"
-                className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none ring-gray-900/10 focus:ring-2"
-                value={patient.allergies}
-                onChange={(e) =>
-                  setPatient((p) => ({ ...p, allergies: e.target.value }))
-                }
-              />
-            </div>
-          </div>
-        </section>
-
-        <section className="mt-8 rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
-          <div className="flex items-center gap-2">
-            <span className="inline-flex h-4 w-4 items-center justify-center rounded-md bg-gray-900 text-white">
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                className="h-3 w-3"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-              >
-                <path d="M22 12h-2.48a2 2 0 0 0-1.93 1.46l-2.35 8.36a.25.25 0 0 1-.48 0L9.24 2.18a.25.25 0 0 0-.48 0l-2.35 8.36A2 2 0 0 1 4.49 12H2" />
-              </svg>
-            </span>
             <h2 className="text-lg font-semibold text-gray-900">
               Symptom Entry
             </h2>
           </div>
-          <p className="mt-1 text-sm text-gray-600">
-            Our NLP models process symptom descriptions for accurate clinical
-            correlation
-          </p>
 
           <div className="mt-4">
             <p className="text-sm font-medium text-gray-700">
@@ -335,21 +217,6 @@ const SymptomAssessmentPage = () => {
               >
                 + Add Symptom
               </button>
-            </div>
-
-            <div className="sm:col-span-2">
-              <label className="block text-sm font-medium text-gray-700">
-                Additional Description
-              </label>
-              <textarea
-                rows={3}
-                placeholder="Detailed description, triggers, associated symptoms..."
-                className="mt-1 w-full resize-y rounded-md border border-gray-300 px-3 py-2 text-sm outline-none ring-gray-900/10 focus:ring-2"
-                value={entry.notes}
-                onChange={(e) =>
-                  setEntry((prev) => ({ ...prev, notes: e.target.value }))
-                }
-              />
             </div>
           </div>
 

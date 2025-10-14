@@ -14,6 +14,9 @@ import AdminSignup from "../components/AdminSignup/AdminSignup";
 import AdminDashboard from "../pages/AdminDashboard/AdminDashboard";
 import NotFound404Page from "../components/NotFound404Page";
 import UploadPage from "../pages/PatientDashboard/UploadImage";
+import DoctorUploadImage from "../pages/DoctorDashboard/DoctorUploadImage";
+import DoctorSymptomsAssessment from "../pages/DoctorDashboard/DoctorSymptomsAssessment";
+import DoctorResultsPage from "../pages/DoctorDashboard/DoctorResultsPage";
 import SymptomAssessmentPage from "../pages/PatientDashboard/SymptomsAssessment";
 import ResultsPage from "../pages/PatientDashboard/ResultsPage";
 import HistoryPage from "../pages/PatientDashboard/HistoryPage";
@@ -35,6 +38,18 @@ const App = () => {
         <Route path="/patient-dashboard/history" element={<HistoryPage />} />
         <Route path="*" element={<NotFound404Page />} />
         <Route path="/doctor-dashboard" element={<DoctorDashboard />} />
+        <Route
+          path="/doctor-dashboard/upload"
+          element={<DoctorUploadImage />}
+        />
+        <Route
+          path="/doctor-dashboard/symptoms"
+          element={<DoctorSymptomsAssessment />}
+        />
+        <Route
+          path="/doctor-dashboard/results"
+          element={<DoctorResultsPage />}
+        />
         <Route path="/doctor-register" element={<DoctorRegistration />} />
         <Route path="/doctor-login" element={<DoctorLogin />} />
         <Route path="/admin-login" element={<AdminLogin />} />

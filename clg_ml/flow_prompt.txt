@@ -1,0 +1,18 @@
+now I'll tell the work flow
+Patient inputs the image from the django-react application. The Image will belong to any of the above mentioned domains. This will be classified by the model and medical recommendations will be provided. 
+now this recommendation and image classification of model results will be sent to doctor and patient. Where the patient can blindly follow the model or wait for doctor's advice over it.
+So mentioned domains will be
+1) skin diseases -> eczema, benign-keratosis like lesions, psoriasis
+2) wounds -> diabetic foot ulcers, skin burns
+3) eye -> cataract, diabetic retinopathy, glaucoma
+4) oral diseases -> hypodontia, dental calculus, mouth ulcers
+5) nail diseases -> nail clubbing, Acral_lentiginous_melanoma, onychogryphosis
+
+
+======================================================================================================================================
+Initial prompt for model
+So this is a 2 step multiclass classification model. Where the step 1 is to predict which domain the image input belongs to that is either skin_diseases, oral_disorder.
+The step 2 would be to classify domain specific classification
+1) skin diseases -> eczema, benign-keratosis like lesions.
+2) oral diseases -> hypodontia, mouth ulcers
+
