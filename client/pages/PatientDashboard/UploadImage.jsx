@@ -18,6 +18,7 @@ const ALLOWED = [
 const UploadPage = () => {
   const [file, setFile] = useState(null);
   const [uploading, setUploading] = useState(false);
+  const [predictions, setPredictions] = useState(null);
 
   const validateFiles = (incoming) => {
     const accepted = [];
@@ -37,9 +38,15 @@ const UploadPage = () => {
 
   const handleAddFiles = (incoming) => {
     const valid = validateFiles(incoming);
-    if (valid.length) setFile(valid[0]);
+    if (valid.length) {
+      setFile(valid[0]);
+      setPredictions(null);
+    }
   };
-  const removeFile = () => setFile(null);
+  const removeFile = () => {
+    setFile(null);
+    setPredictions(null);
+  };
 
   const handleUpload = async () => {
     if (!file) {
@@ -62,8 +69,10 @@ const UploadPage = () => {
         }
       );
       toast.success("Upload successful.");
+      setPredictions(res.data);
       setFile(null);
       console.log(res.data);
+      console.log("Prediction result:", res.data);
     } catch (err) {
       const backendError =
         err.response?.data?.error || "Upload failed. Please try again.";
@@ -148,6 +157,31 @@ const UploadPage = () => {
             </button>
           </div>
         </section>
+        {predictions && (
+          <section className="mt-10 rounded-xl border border-green-200 bg-green-50 p-6 shadow-sm">
+            <h2 className="text-lg font-semibold text-green-900">
+              Prediction Result
+            </h2>
+            <div className="mt-4 text-sm text-green-800">
+              <p>
+                <strong>Predicted Domain:</strong>{" "}
+                {predictions.domain_classification.predicted_domain}
+              </p>
+              <p>
+                <strong>Domain Confidence:</strong>{" "}
+                {predictions.domain_classification.confidence}
+              </p>
+              <p className="mt-3">
+                <strong>Final Label:</strong>{" "}
+                {predictions.final_prediction.label}
+              </p>
+              <p>
+                <strong>Prediction Confidence:</strong>{" "}
+                {predictions.final_prediction.confidence}
+              </p>
+            </div>
+          </section>
+        )}
       </main>
     </div>
   );

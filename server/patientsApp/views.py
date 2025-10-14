@@ -158,14 +158,35 @@ def patient_dashboard(request):
 @api_view(["POST"])
 @parser_classes([MultiPartParser, FormParser])
 def upload_medical_image(request):
-    data = request.data
-    print("user: ", data)
+    import os
+    import numpy as np
+    from tensorflow.keras.models import load_model
+    from tensorflow.keras.preprocessing import image
+    from io import BytesIO
+    from PIL import Image
 
+    DOMAIN_MODEL_PATH = "/home/vaibhav/Documents/actualProjects/majorProject/clg_ml/domain_classifier_best.h5"
+    ORAL_MODEL_PATH = "/home/vaibhav/Documents/actualProjects/majorProject/clg_ml/oral_disorder_model.h5"
+    SKIN_MODEL_PATH = "/home/vaibhav/Documents/actualProjects/majorProject/clg_ml/skin_diseases_model.h5"
+    IMG_SIZE = (224, 224)
+
+    oral_classes = ['hypodontia', 'mouth_ulcers']
+    skin_classes = ['benign keratosis like lesion', 'eczema']
+    domain_classes = ['oral_disorder', 'skin_disease']
+
+    def preprocess_image_from_file(file):
+        img = Image.open(file).convert("RGB")
+        img = img.resize(IMG_SIZE)
+        img_array = image.img_to_array(img)
+        img_array = np.expand_dims(img_array, axis=0)
+        img_array = img_array / 255.0
+        return img_array
+
+    data = request.data
     file = request.FILES.get("images")
     token = request.headers.get('Authorization')
 
     if not token:
-        print("token missing")
         raise AuthenticationFailed('Token missing')
 
     if not file:
@@ -206,7 +227,40 @@ def upload_medical_image(request):
             {"$set": {"patient_medical_img_id": str(insert_result.inserted_id)}}
         )
 
-        return Response({"message": "Image uploaded and stored successfully"}, status=status.HTTP_201_CREATED)
+        file_io = BytesIO(file_content)
+        img_array = preprocess_image_from_file(file_io)
+
+        domain_model = load_model(DOMAIN_MODEL_PATH, compile=False)
+        domain_preds = domain_model.predict(img_array, verbose=0)[0]
+        domain_index = np.argmax(domain_preds)
+        domain_label = domain_classes[domain_index]
+        domain_confidence = domain_preds[domain_index] * 100
+
+        if domain_label == 'oral_disorder':
+            model = load_model(ORAL_MODEL_PATH, compile=False)
+            classes = oral_classes
+        else:
+            model = load_model(SKIN_MODEL_PATH, compile=False)
+            classes = skin_classes
+
+        preds = model.predict(img_array, verbose=0)[0]
+        pred_index = np.argmax(preds)
+        pred_label = classes[pred_index]
+        pred_conf = preds[pred_index] * 100
+
+        result = {
+            "message": "Image uploaded and classified successfully",
+            "domain_classification": {
+                "predicted_domain": domain_label,
+                "confidence": f"{domain_confidence:.2f}%"
+            },
+            "final_prediction": {
+                "label": pred_label,
+                "confidence": f"{pred_conf:.2f}%"
+            }
+        }
+
+        return Response(result, status=status.HTTP_201_CREATED)
 
     except jwt.ExpiredSignatureError:
         return Response({"error": "Token has expired"}, status=status.HTTP_401_UNAUTHORIZED)
@@ -255,6 +309,7 @@ def symptom_assessment(request):
         return Response({"error": "Invalid token."}, status=status.HTTP_401_UNAUTHORIZED)
     except Exception as e:
         return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    
 @api_view(["GET"])
 def get_results(request):
     data = request.data
