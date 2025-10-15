@@ -184,6 +184,9 @@ def upload_medical_image(request):
 
     data = request.data
     file = request.FILES.get("images")
+    selected_doctor_id = request.data.get("selected_doctor")
+    doctor_doc = doctors_collection.find_one({"doctor_id": selected_doctor_id})
+    selected_doctor_name = doctor_doc.get("personal_info", {}).get("fullName") if doctor_doc else None
     token = request.headers.get('Authorization')
 
     if not token:
@@ -219,6 +222,7 @@ def upload_medical_image(request):
             "doc_verification_status": "pending",
             "analysis_type": "image",
             "patient_id": patient_id,
+            "selected_doctor_name": selected_doctor_name,
         }
 
         insert_result = patient_medical_img_info.insert_one(record)
@@ -287,28 +291,96 @@ def upload_medical_image(request):
         print("Upload failed:", str(e))
         return Response({"error": "Internal server error"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
+@api_view(["GET"])
+def get_image_classifications(request):
+    try:
+        token = request.headers.get('Authorization')
+
+        if not token:
+            raise AuthenticationFailed('Token missing')
+        token = token.split(" ")[1]
+        decoded_token = jwt.decode(token, settings.SECRET_KEY, algorithms=["HS256"])
+        patient_id = decoded_token.get('user_id')
+
+        medication_map = {
+            "eczema": "Topical corticosteroids and moisturizers (e.g., Hydrocortisone cream, CeraVe).",
+            "benign keratosis like lesion": "Cryotherapy or salicylic acid for removal; monitor regularly.",
+            "mouth ulcers": "Topical benzocaine gel and vitamin B12 supplements.",
+            "hypodontia": "Dental prosthetics consultation; temporary use of dental wax for comfort.",
+        }
+
+        records = patient_medical_img_info.find({"patient_id": patient_id})
+        data = []
+        for record in records:
+            label = record.get("model_prediction", {}).get("final_label", "")
+            confidence = record.get("model_prediction", {}).get("prediction_confidence", "")
+
+            medication = medication_map.get(label.lower(), "Low confidence on image, consult your doctor for appropriate treatment.")
+
+            data.append({
+                "file_name": record.get("file_name"),
+                "prediction": label,
+                "confidence": confidence,
+                "hardcode_medication": medication,
+                "doctor_name": record.get("selected_doctor_name"),
+                "doctor_recommendation": record.get("doctor_recommendation", None)
+            })
+        return Response({"classifications": data})
+    
+    except jwt.ExpiredSignatureError:
+        return Response({"error": "Token expired."}, status=status.HTTP_401_UNAUTHORIZED)
+    except jwt.InvalidTokenError:
+        return Response({"error": "Invalid token."}, status=status.HTTP_401_UNAUTHORIZED)
+    except Exception as e:
+        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 @api_view(["POST"])
 def symptom_assessment(request):
+    import joblib
+    import pandas as pd
+    import numpy as np
     try:
         token = request.headers.get("Authorization", "").split(" ")[1]
         decoded_token = jwt.decode(token, settings.SECRET_KEY, algorithms=["HS256"])
         patient_id = decoded_token.get("user_id")
         email = patient_collection.find_one({"patient_id": patient_id}).get("email")
         data = request.data
-        patient_info = data.get("patient")
         symptoms = data.get("symptoms")
 
-        if not symptoms or not isinstance(symptoms, list) or not patient_info:
+        if not symptoms or not isinstance(symptoms, list):
             return Response({"error": "Invalid or missing data."}, status=status.HTTP_400_BAD_REQUEST)
+        
+        MODEL_PATH = '/home/vaibhav/Documents/actualProjects/majorProject/clg_ml/symptom_based_diseaese_detection/final_rf_model_top30.pkl'
+        ENCODER_PATH = '/home/vaibhav/Documents/actualProjects/majorProject/clg_ml/symptom_based_diseaese_detection/label_encoder.pkl'
+        SYMPTOMS_PATH = '/home/vaibhav/Documents/actualProjects/majorProject/clg_ml/symptom_based_diseaese_detection/selected_symptoms.csv'
 
+        rf_model = joblib.load(MODEL_PATH)
+        label_encoder = joblib.load(ENCODER_PATH)
+        selected_symptoms = pd.read_csv(SYMPTOMS_PATH).squeeze().tolist()
+
+        symptom_vector = [1 if symptom in symptoms else 0 for symptom in selected_symptoms]
+
+        probs = rf_model.predict_proba([symptom_vector])[0]
+        top_indices = np.argsort(probs)[-3:][::-1]
+        top_predictions = [
+            {
+                "disease": label_encoder.inverse_transform([i])[0],
+                "confidence": round(probs[i] * 100, 2)
+            }
+            for i in top_indices
+        ]
+
+        prediction_result = {
+            "top_predictions": top_predictions
+        }
         record = {
             "patient_id": patient_id,
             "patient_email": email,
-            "patient_info": patient_info,
             "symptoms": symptoms,
             "submitted_at": datetime.utcnow(),
-            "doc_verification_status": "pending"
+            "doc_verification_status": "pending",
+            "model_prediction": prediction_result,
+            "doctor_recommendation": None
         }
 
         insert_result = patient_medical_info.insert_one(record)
@@ -318,7 +390,10 @@ def symptom_assessment(request):
             {"$set": {"patient_symptoms_id": str(insert_result.inserted_id)}}
         )
 
-        return Response({"message": "Assessment submitted successfully."}, status=status.HTTP_201_CREATED)
+        return Response({
+            "message": "Assessment submitted successfully.",
+            "model_prediction": prediction_result
+        }, status=status.HTTP_201_CREATED)
 
     except jwt.ExpiredSignatureError:
         return Response({"error": "Token expired."}, status=status.HTTP_401_UNAUTHORIZED)

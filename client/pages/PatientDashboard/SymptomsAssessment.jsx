@@ -49,6 +49,7 @@ const SymptomAssessmentPage = () => {
   });
 
   const [symptoms, setSymptoms] = useState([]);
+  const [predictions, setPredictions] = useState([]);
 
   const addQuickSymptom = (s) => {
     if (symptoms.find((x) => x.name === s)) {
@@ -82,16 +83,20 @@ const SymptomAssessmentPage = () => {
     setSymptoms((prev) => prev.filter((s) => s.name !== name));
 
   const submitAssessment = async () => {
-    if (!symptoms.length) {
-      toast.error("Please add at least one symptom.");
+    if (!symptoms.length > 7) {
+      console.log("symptoms length: ", symptoms.length);
+      toast.error(
+        "Please add minimum of 7 symptoms for better results from model."
+      );
       return;
     }
     try {
       const token = localStorage.getItem("access_token");
+      const symptomNames = symptoms.map((s) => s.name);
       const res = await axios.post(
         "http://127.0.0.1:8000/patient/symptom-assessment/",
         {
-          symptoms,
+          symptoms: symptomNames,
         },
         {
           headers: {
@@ -101,7 +106,11 @@ const SymptomAssessmentPage = () => {
         }
       );
       toast.success("Assessment submitted successfully.");
-      console.log(res.data);
+      console.log(
+        "Top predictions: ",
+        res.data.model_prediction.top_predictions
+      );
+      setPredictions(res.data.model_prediction.top_predictions);
       setSymptoms([]);
     } catch (err) {
       const message =
@@ -265,6 +274,29 @@ const SymptomAssessmentPage = () => {
             </button>
           </div>
         </section>
+        {predictions.length > 0 && (
+          <section className="mt-8 rounded-xl border border-green-300 bg-white p-6 shadow-sm">
+            <h2 className="text-lg font-semibold text-gray-900 text-center mb-4">
+              Top 3 Model Predictions.
+            </h2>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              {predictions.map((pred, idx) => (
+                <div
+                  key={idx}
+                  className="rounded-lg border border-gray-200 p-4 text-center bg-green-50"
+                >
+                  <h3 className="text-md font-semibold text-gray-800">
+                    {idx + 1}. {pred.disease}
+                  </h3>
+                  <p className="text-sm text-gray-600">
+                    Confidence:{" "}
+                    <span className="font-medium">{pred.confidence}%</span>
+                  </p>
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
       </main>
     </div>
   );

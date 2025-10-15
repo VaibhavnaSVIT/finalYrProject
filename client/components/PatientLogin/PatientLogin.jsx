@@ -19,7 +19,6 @@ const PatientLogin = () => {
           password,
         }
       );
-      console.log("Login Response:", response.data);
 
       if (response.data.tokens?.access) {
         localStorage.setItem("access_token", response.data.tokens.access);

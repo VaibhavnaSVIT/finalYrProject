@@ -60,6 +60,9 @@ const UploadPage = () => {
       const token = localStorage.getItem("access_token");
       const form = new FormData();
       form.append("images", file);
+      if (selectedDoctor) {
+        form.append("selected_doctor", selectedDoctor);
+      }
       const res = await axios.post(
         "http://127.0.0.1:8000/patient/upload-images/",
         form,
