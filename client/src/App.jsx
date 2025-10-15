@@ -19,7 +19,6 @@ import DoctorSymptomsAssessment from "../pages/DoctorDashboard/DoctorSymptomsAss
 import DoctorResultsPage from "../pages/DoctorDashboard/DoctorResultsPage";
 import SymptomAssessmentPage from "../pages/PatientDashboard/SymptomsAssessment";
 import ResultsPage from "../pages/PatientDashboard/ResultsPage";
-import HistoryPage from "../pages/PatientDashboard/HistoryPage";
 
 const App = () => {
   return (
@@ -35,7 +34,6 @@ const App = () => {
           element={<SymptomAssessmentPage />}
         />
         <Route path="/patient-dashboard/results" element={<ResultsPage />} />
-        <Route path="/patient-dashboard/history" element={<HistoryPage />} />
         <Route path="*" element={<NotFound404Page />} />
         <Route path="/doctor-dashboard" element={<DoctorDashboard />} />
         <Route

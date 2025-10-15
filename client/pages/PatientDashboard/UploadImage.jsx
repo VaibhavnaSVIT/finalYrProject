@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import axios from "axios";
 import PatientHeader from "../../components/PatientHeader.jsx";
 import DropArea from "../../components/DropArea";
@@ -19,6 +19,8 @@ const UploadPage = () => {
   const [file, setFile] = useState(null);
   const [uploading, setUploading] = useState(false);
   const [predictions, setPredictions] = useState(null);
+  const [doctors, setDoctors] = useState([]);
+  const [selectedDoctor, setSelectedDoctor] = useState("");
 
   const validateFiles = (incoming) => {
     const accepted = [];
@@ -71,8 +73,6 @@ const UploadPage = () => {
       toast.success("Upload successful.");
       setPredictions(res.data);
       setFile(null);
-      console.log(res.data);
-      console.log("Prediction result:", res.data);
     } catch (err) {
       const backendError =
         err.response?.data?.error || "Upload failed. Please try again.";
@@ -82,6 +82,26 @@ const UploadPage = () => {
       setUploading(false);
     }
   };
+
+  useEffect(() => {
+    const fetchDoctors = async () => {
+      try {
+        const token = localStorage.getItem("access_token");
+        const res = await axios.get(
+          "http://127.0.0.1:8000/patient/list-doctors/",
+          {
+            headers: token ? { Authorization: `Bearer ${token}` } : {},
+          }
+        );
+        setDoctors(res.data.doctors);
+      } catch (err) {
+        console.error("Error fetching doctors:", err);
+        toast.error("Could not load doctor list.");
+      }
+    };
+
+    fetchDoctors();
+  }, []);
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -147,7 +167,34 @@ const UploadPage = () => {
               </ul>
             </div>
           )}
-          <div className="mt-6 flex justify-end">
+          <div className="mt-6 flex flex-wrap items-center justify-between gap-4">
+            <div>
+              {doctors.length > 0 && (
+                <div>
+                  <label
+                    htmlFor="doctor"
+                    className="block text-sm font-medium text-gray-700 mb-1"
+                  >
+                    Choose a doctor to send the results:
+                  </label>
+                  <select
+                    id="doctor"
+                    name="doctor"
+                    value={selectedDoctor}
+                    onChange={(e) => setSelectedDoctor(e.target.value)}
+                    className="rounded-md border border-gray-300 bg-white py-2 px-3 shadow-sm focus:border-gray-900 focus:outline-none focus:ring-gray-900 sm:text-sm"
+                  >
+                    <option value="">-- Select a Doctor --</option>
+                    {doctors.map((doc) => (
+                      <option key={doc.doctor_id} value={doc.doctor_id}>
+                        {doc.personal_info?.fullName || "Unnamed Doctor"}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+            </div>
+
             <button
               onClick={handleUpload}
               disabled={uploading}
@@ -162,6 +209,19 @@ const UploadPage = () => {
             <h2 className="text-lg font-semibold text-green-900">
               Prediction Result
             </h2>
+
+            {(parseFloat(
+              predictions.domain_classification.confidence.replace("%", "")
+            ) < 85 ||
+              parseFloat(
+                predictions.final_prediction.confidence.replace("%", "")
+              ) < 85) && (
+              <div className="mt-4 rounded-md bg-red-100 p-4 text-sm text-red-800 border border-red-300">
+                ⚠️ The model's confidence is below 85%. Please consider
+                consulting a doctor for further evaluation.
+              </div>
+            )}
+
             <div className="mt-4 text-sm text-green-800">
               <p>
                 <strong>Predicted Domain:</strong>{" "}

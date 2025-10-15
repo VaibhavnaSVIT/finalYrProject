@@ -111,10 +111,6 @@ const PatientHeader = () => {
               <CollectionsOutlinedIcon />
               Results
             </NavLink>
-            <NavLink to="/patient-dashboard/history" className={linkClasses}>
-              <HistoryOutlinedIcon />
-              History
-            </NavLink>
           </nav>
 
           <div className="flex items-center gap-4">

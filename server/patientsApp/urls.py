@@ -1,7 +1,7 @@
 from django.urls import path
 from rest_framework_simplejwt.views import TokenRefreshView
 from .views import (register_patient, verify_otp, 
-        add_patient_medical_info, patient_login, patient_dashboard, upload_medical_image, symptom_assessment, get_results, patient_medical_history
+        add_patient_medical_info, patient_login, patient_dashboard, upload_medical_image, symptom_assessment, get_results, get_verified_doctors
     )
 
 urlpatterns = [
@@ -12,7 +12,7 @@ urlpatterns = [
      path("upload-images/", upload_medical_image, name='upload-medical-img'),
     path("symptom-assessment/", symptom_assessment, name='symptom-assessment'),
     path("results/", get_results, name='get-results'),
-    path("medical-history-summary/", patient_medical_history, name='patient-medical-history'),
     path('login/', patient_login, name='patient-login'),
+    path('list-doctors/', get_verified_doctors, name='verified-doctors'),
     path('token/refresh/', TokenRefreshView.as_view(), name='token-refresh'),
 ]

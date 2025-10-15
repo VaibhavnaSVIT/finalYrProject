@@ -129,7 +129,8 @@ def register_doctor(request):
             "professional_info": professional_info,
             "verification_info": verification_info,
             "password": hashed_password.decode('utf-8'),
-            "created_at": datetime.utcnow()
+            "created_at": datetime.utcnow(),
+            "no_of_patients": 0
         }
 
         print("inserted data to db")

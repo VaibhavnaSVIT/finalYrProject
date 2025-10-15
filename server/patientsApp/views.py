@@ -7,7 +7,7 @@ from rest_framework.decorators import api_view, parser_classes
 from rest_framework.parsers import MultiPartParser, FormParser
 from rest_framework.exceptions import AuthenticationFailed
 from rest_framework import status
-from db_connections import patient_collection, patient_otp_collection, patient_medical_info, patient_medical_img_info
+from db_connections import patient_collection, patient_otp_collection, patient_medical_info, patient_medical_img_info, doctors_collection
 import bcrypt
 from mailjetMailSender import send_email
 from rest_framework_simplejwt.tokens import RefreshToken
@@ -248,6 +248,23 @@ def upload_medical_image(request):
         pred_label = classes[pred_index]
         pred_conf = preds[pred_index] * 100
 
+        model_prediction = {
+            "predicted_domain": domain_label,
+            "domain_confidence": float(f"{domain_confidence:.2f}"),
+            "final_label": pred_label,
+            "prediction_confidence": float(f"{pred_conf:.2f}")
+        }
+
+        patient_medical_img_info.update_one(
+            {"_id": insert_result.inserted_id},
+            {
+                "$set": {
+                    "model_prediction": model_prediction,
+                    "doctor_recommendation": None  # to be set later
+                }
+            }
+        )
+
         result = {
             "message": "Image uploaded and classified successfully",
             "domain_classification": {
@@ -323,33 +340,14 @@ def get_results(request):
     return Response({"results": results}, status=status.HTTP_200_OK)
 
 @api_view(["GET"])
-def patient_medical_history(request):
-    token = request.headers.get("Authorization", "").split(" ")[1]
-    decoded_token = jwt.decode(token, settings.SECRET_KEY, algorithms=["HS256"])
-    patient_id = decoded_token.get("user_id")
-
-
-    total_images = patient_medical_img_info.count_documents({"patient_id": patient_id})
-    pending_images = patient_medical_img_info.count_documents({"patient_id": patient_id, "status": "pending"})
-    approved_images = patient_medical_img_info.count_documents({"patient_id": patient_id, "status": "approved"})
-    rejected_images = patient_medical_img_info.count_documents({"patient_id": patient_id, "status": "rejected"})
-
-    total_symptoms = patient_medical_info.count_documents({"patient_id": patient_id})
-    pending_symptoms = patient_medical_info.count_documents({"patient_id": patient_id, "status": "pending"})
-    approved_symptoms = patient_medical_info.count_documents({"patient_id": patient_id, "status": "approved"})
-    rejected_symptoms = patient_medical_info.count_documents({"patient_id": patient_id, "status": "rejected"})
-
-    total_records = total_images + total_symptoms
-    pending_records = pending_images + pending_symptoms
-    approved_records = approved_images + approved_symptoms
-    rejected_records = rejected_images + rejected_symptoms
-
-    return Response(
-        {
-            "total_records": total_records,
-            "pending": pending_records,
-            "approved": approved_records,
-            "rejected": rejected_records,
-        },
-        status=status.HTTP_200_OK
+def get_verified_doctors(request):
+    doctors = doctors_collection.find(
+    {"verification_info.admin_approval_status": "approved"},
+    {
+        "_id": 0,
+        "doctor_id": 1,
+        "personal_info.fullName": 1,
+    }
     )
+    doctor_list = list(doctors)
+    return Response({"doctors": doctor_list}, status=status.HTTP_200_OK)
