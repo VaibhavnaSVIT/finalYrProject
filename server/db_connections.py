@@ -15,6 +15,8 @@ doctorsDB = client['DoctorsDB']
 doctors_collection = doctorsDB['doctors']
 doctors_info_collection = doctorsDB['doctors_info']
 doctors_otp_collection = doctorsDB['doctorsOTP']
+doctors_medical_img_info = doctorsDB['doctor_img_info']
+doctors_symptom_info = doctorsDB['doctor_symptom_prediction']
 
 adminsDB = client['AdminsDB']
 admin_collection = adminsDB['admin']

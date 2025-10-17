@@ -18,6 +18,10 @@ const ALLOWED = [
 const DoctorUploadImage = () => {
   const [file, setFile] = useState(null);
   const [uploading, setUploading] = useState(false);
+  const [predictionResult, setPredictionResult] = useState(null);
+  const [isIncorrect, setIsIncorrect] = useState(false);
+  const [domain, setDomain] = useState("");
+  const [domainSpecific, setDomainSpecific] = useState("");
 
   const validateFiles = (incoming) => {
     const accepted = [];
@@ -39,18 +43,39 @@ const DoctorUploadImage = () => {
     const valid = validateFiles(incoming);
     if (valid.length) setFile(valid[0]);
   };
-  const removeFile = () => setFile(null);
+
+  const removeFile = () => {
+    setFile(null);
+    setPredictionResult(null);
+    setIsIncorrect(false);
+    setDomain("");
+    setDomainSpecific("");
+  };
 
   const handleDoctorImgUpload = async () => {
     if (!file) {
       toast.info("Please select an image.");
       return;
     }
+
     setUploading(true);
     try {
       const token = localStorage.getItem("access_token");
       const form = new FormData();
       form.append("images", file);
+
+      const res = await axios.post(
+        "http://127.0.0.1:8000/doctor/upload-images/",
+        form,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "multipart/form-data",
+          },
+        }
+      );
+      setPredictionResult(res.data);
+      toast.success("Upload successful.");
     } catch (err) {
       const backendError =
         err.response?.data?.error || "Upload failed. Please try again.";
@@ -59,6 +84,48 @@ const DoctorUploadImage = () => {
     } finally {
       setUploading(false);
     }
+  };
+
+  const handleFeedbackSubmit = async () => {
+    if (!domain || !domainSpecific) {
+      toast.error("Please select both domain and domain-specific type.");
+      return;
+    }
+    if (!file) {
+      toast.error("No file to send as feedback.");
+      return;
+    }
+
+    try {
+      const token = localStorage.getItem("access_token");
+
+      const formData = new FormData();
+      formData.append("image", file);
+      formData.append("domain", domain);
+      formData.append("domain_specific", domainSpecific);
+
+      await axios.post(
+        "http://127.0.0.1:8000/doctor/wrong-image-feedback/",
+        formData,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "multipart/form-data",
+          },
+        }
+      );
+
+      toast.success("Feedback submitted.");
+      removeFile();
+    } catch (err) {
+      toast.error("Error submitting feedback.");
+      console.error(err);
+    }
+  };
+
+  const domainSpecificOptions = {
+    skin_diseases: ["benign_keartosis_like_lesions", "eczema"],
+    oral_disorder: ["hypondontia", "mouth_ulcer"],
   };
 
   return (
@@ -74,44 +141,24 @@ const DoctorUploadImage = () => {
             Model predicts images of skin diseases and oral disorders.
           </p>
         </section>
+
         <div className="mt-6">
-          <div className="rounded-lg border border-amber-200 bg-amber-50 p-4">
-            <p className="text-sm text-amber-800">
-              Ensure images are clear, properly oriented, and contain no patient
-              identifying information before uploading. Maximum file size: 10MB
-              per image.
-            </p>
-          </div>
-          <div className="mt-6">
-            <Disclaimer />
-          </div>
+          <Disclaimer />
         </div>
+
         <section className="mt-8 rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
           <h2 className="text-lg font-semibold text-gray-900">
-            Upload Medical Images (Skin disease, Oral disorders)
+            Upload Medical Images
           </h2>
           <p className="mt-1 text-gray-700">
-            As a doctor, you can contribute to the project by checking real
-            medical images of skin diseases(eczema, bening keratosis like
-            lesions) and oral disorders(hypodontia, mouth ulcers) and classify
-            them if the prediction is wrong. Based on your feedback, the model
-            shall be re-trained after 50 wrong image predictions.
+            Doctors can flag predictions as incorrect. After 50 incorrect
+            feedbacks, the model is retrained.
           </p>
-          <br></br>
-          <p className="mt-1 text-sm text-gray-600">
-            Supported formats: JPEG, PNG, WEBP, JPG.
-          </p>
-          <div className="mt-3 flex flex-wrap gap-2 text-xs">
-            <span className="rounded-full bg-gray-100 px-2 py-1 text-black">
-              Skin diseases includes eczema or bening keratosis like lesions.
-            </span>
-            <span className="rounded-full bg-gray-100 px-2 py-1 text-black">
-              Oral disorders includes hypodontis or mouth ulcers.
-            </span>
-          </div>
+
           <div className="mt-6">
             <DropArea onFiles={handleAddFiles} />
           </div>
+
           {file && (
             <div className="mt-6">
               <h3 className="text-sm font-semibold text-gray-900">
@@ -133,6 +180,7 @@ const DoctorUploadImage = () => {
               </ul>
             </div>
           )}
+
           <div className="mt-6 flex justify-end">
             <button
               onClick={handleDoctorImgUpload}
@@ -142,6 +190,104 @@ const DoctorUploadImage = () => {
               {uploading ? "Uploading..." : "Upload"}
             </button>
           </div>
+
+          {predictionResult && (
+            <div className="mt-8 border-t pt-6">
+              <h3 className="text-md font-bold text-gray-800 mb-4">
+                Model Prediction Breakdown
+              </h3>
+
+              <div className="text-sm text-gray-700 space-y-2">
+                <p>
+                  <span className="font-semibold">General Domain:</span>{" "}
+                  {predictionResult.domain} (
+                  {predictionResult.domain_confidence}%)
+                </p>
+                <p>
+                  <span className="font-semibold">Specific Prediction:</span>{" "}
+                  {predictionResult.prediction} ({predictionResult.confidence}%)
+                </p>
+              </div>
+
+              {(predictionResult.domain_confidence < 85 ||
+                predictionResult.confidence < 85) && (
+                <p className="mt-4 rounded bg-red-100 border border-red-400 px-4 py-2 text-red-700 font-semibold">
+                  Model's confidence is less than 85%, requires doctor's input.
+                </p>
+              )}
+
+              {!isIncorrect ? (
+                <div className="mt-4 flex gap-4">
+                  <button
+                    onClick={() => {
+                      toast.success("Marked as correct.");
+                      window.location.reload();
+                    }}
+                    className="rounded-full bg-green-600 px-4 py-2 text-white text-sm hover:bg-green-500"
+                  >
+                    ✅ Correct
+                  </button>
+                  <button
+                    onClick={() => setIsIncorrect(true)}
+                    className="rounded-full bg-red-600 px-4 py-2 text-white text-sm hover:bg-red-500"
+                  >
+                    ❌ Incorrect
+                  </button>
+                </div>
+              ) : (
+                <div className="mt-6">
+                  <h4 className="font-semibold text-gray-700">
+                    Mark Correction
+                  </h4>
+
+                  <div className="mt-2">
+                    <label className="block text-sm text-gray-600 mb-1">
+                      General Domain
+                    </label>
+                    <select
+                      value={domain}
+                      onChange={(e) => {
+                        setDomain(e.target.value);
+                        setDomainSpecific("");
+                      }}
+                      className="w-full rounded border px-3 py-2"
+                    >
+                      <option value="">-- Select Domain --</option>
+                      <option value="skin_diseases">Skin Diseases</option>
+                      <option value="oral_disorder">Oral Disorder</option>
+                    </select>
+                  </div>
+
+                  {domain && (
+                    <div className="mt-3">
+                      <label className="block text-sm text-gray-600 mb-1">
+                        Domain Specific
+                      </label>
+                      <select
+                        value={domainSpecific}
+                        onChange={(e) => setDomainSpecific(e.target.value)}
+                        className="w-full rounded border px-3 py-2"
+                      >
+                        <option value="">-- Select Specific --</option>
+                        {domainSpecificOptions[domain]?.map((item) => (
+                          <option key={item} value={item}>
+                            {item}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+
+                  <button
+                    onClick={handleFeedbackSubmit}
+                    className="mt-4 inline-flex items-center rounded-full bg-blue-600 px-5 py-2 text-sm font-semibold text-white hover:bg-blue-500"
+                  >
+                    Submit Feedback
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
         </section>
       </main>
     </div>
