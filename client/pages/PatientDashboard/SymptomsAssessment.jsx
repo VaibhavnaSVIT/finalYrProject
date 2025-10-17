@@ -38,8 +38,6 @@ const COMMON_SYMPTOMS = [
   "nausea",
 ];
 
-const severities = ["Mild", "Moderate", "Severe", "Critical"];
-
 const SymptomAssessmentPage = () => {
   const [entry, setEntry] = useState({
     name: "",
@@ -64,29 +62,11 @@ const SymptomAssessmentPage = () => {
     ]);
   };
 
-  const addSymptom = () => {
-    if (!entry.name.trim() || !entry.severity) {
-      toast.error("Symptom name and severity are required.");
-      return;
-    }
-    if (
-      symptoms.find(
-        (s) => s.name.toLowerCase() === entry.name.trim().toLowerCase()
-      )
-    ) {
-      toast.info("This symptom is already in the list.");
-      return;
-    }
-    setSymptoms((prev) => [...prev, { ...entry, name: entry.name.trim() }]);
-    setEntry({ name: "", severity: "", duration: "", notes: "" });
-  };
-
   const removeSymptom = (name) =>
     setSymptoms((prev) => prev.filter((s) => s.name !== name));
 
   const submitAssessment = async () => {
     if (symptoms.length < 7) {
-      console.log("symptoms length: ", symptoms.length);
       toast.error(
         "Please add minimum of 7 symptoms for better results from model."
       );
@@ -109,10 +89,6 @@ const SymptomAssessmentPage = () => {
         }
       );
       toast.success("Assessment submitted successfully.");
-      console.log(
-        "Top predictions: ",
-        res.data.model_prediction.top_predictions
-      );
       setPredictions(res.data.model_prediction.top_predictions);
       setSymptoms([]);
     } catch (err) {

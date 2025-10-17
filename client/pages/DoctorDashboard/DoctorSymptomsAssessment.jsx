@@ -38,8 +38,6 @@ const COMMON_SYMPTOMS = [
   "nausea",
 ];
 
-const severities = ["Mild", "Moderate", "Severe", "Critical"];
-
 const DoctorSymptomsAssessment = () => {
   const [entry, setEntry] = useState({
     name: "",
@@ -49,6 +47,7 @@ const DoctorSymptomsAssessment = () => {
   });
 
   const [symptoms, setSymptoms] = useState([]);
+  const [predictions, setPredictions] = useState([]);
 
   const addQuickSymptom = (s) => {
     if (symptoms.find((x) => x.name === s)) {
@@ -61,33 +60,34 @@ const DoctorSymptomsAssessment = () => {
     ]);
   };
 
-  const addSymptom = () => {
-    if (!entry.name.trim() || !entry.severity) {
-      toast.error("Symptom name and severity are required.");
-      return;
-    }
-    if (
-      symptoms.find(
-        (s) => s.name.toLowerCase() === entry.name.trim().toLowerCase()
-      )
-    ) {
-      toast.info("This symptom is already in the list.");
-      return;
-    }
-    setSymptoms((prev) => [...prev, { ...entry, name: entry.name.trim() }]);
-    setEntry({ name: "", severity: "", duration: "", notes: "" });
-  };
-
   const removeSymptom = (name) =>
     setSymptoms((prev) => prev.filter((s) => s.name !== name));
 
   const submitAssessment = async () => {
-    if (!symptoms.length) {
-      toast.error("Please add at least one symptom.");
+    if (symptoms.length < 7) {
+      toast.error(
+        "Please add minimum of 7 symptoms for better results from model."
+      );
       return;
     }
     try {
       const token = localStorage.getItem("access_token");
+      const symptomNames = symptoms.map((s) => s.name);
+      const res = await axios.post(
+        "http://127.0.0.1:8000/doctor/symptom-assessment/",
+        {
+          symptoms: symptomNames,
+        },
+        {
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
+      toast.success("Assessment submitted successfully.");
+      setPredictions(res.data.model_prediction.top_predictions);
+      setSymptoms([]);
     } catch (err) {
       const message =
         err.response?.data?.error || "Something went wrong. Please try again.";
@@ -142,68 +142,6 @@ const DoctorSymptomsAssessment = () => {
             </div>
           </div>
 
-          <div className="mt-6 grid gap-4 sm:grid-cols-2">
-            <div>
-              <label className="block text-sm font-medium text-gray-700">
-                Symptom Name <span className="text-red-500">*</span>
-              </label>
-              <input
-                type="text"
-                placeholder="Enter symptom name"
-                className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none ring-gray-900/10 focus:ring-2"
-                value={entry.name}
-                onChange={(e) =>
-                  setEntry((prev) => ({ ...prev, name: e.target.value }))
-                }
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700">
-                Severity Level <span className="text-red-500">*</span>
-              </label>
-              <select
-                className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none ring-gray-900/10 focus:ring-2"
-                value={entry.severity}
-                onChange={(e) =>
-                  setEntry((prev) => ({ ...prev, severity: e.target.value }))
-                }
-              >
-                <option value="">Select severity</option>
-                {severities.map((s) => (
-                  <option key={s} value={s}>
-                    {s}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700">
-                Duration
-              </label>
-              <input
-                type="text"
-                placeholder="e.g., 3 days, 2 weeks, ongoing"
-                className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none ring-gray-900/10 focus:ring-2"
-                value={entry.duration}
-                onChange={(e) =>
-                  setEntry((prev) => ({ ...prev, duration: e.target.value }))
-                }
-              />
-            </div>
-
-            <div className="flex items-end">
-              <button
-                type="button"
-                onClick={addSymptom}
-                className="inline-flex w-full items-center justify-center rounded-md bg-gray-700 px-4 py-2 text-sm font-semibold text-white hover:bg-gray-800"
-              >
-                + Add Symptom
-              </button>
-            </div>
-          </div>
-
           {symptoms.length > 0 && (
             <div className="mt-6">
               <h3 className="text-sm font-semibold text-gray-900">
@@ -249,6 +187,36 @@ const DoctorSymptomsAssessment = () => {
             </button>
           </div>
         </section>
+        {predictions.length > 0 && (
+          <section className="mt-8 rounded-xl border border-green-300 bg-white p-6 shadow-sm">
+            <h2 className="text-lg font-semibold text-gray-900 text-center mb-4">
+              Top 3 Model Predictions.
+            </h2>
+
+            {predictions[0].confidence < 20 && (
+              <div className="mb-4 rounded bg-red-100 p-4 text-center text-red-700 font-semibold">
+                The model's confidence is below 20%, not sure !
+              </div>
+            )}
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              {predictions.map((pred, idx) => (
+                <div
+                  key={idx}
+                  className="rounded-lg border border-gray-200 p-4 text-center bg-green-50"
+                >
+                  <h3 className="text-md font-semibold text-gray-800">
+                    {idx + 1}. {pred.disease}
+                  </h3>
+                  <p className="text-sm text-gray-600">
+                    Confidence:{" "}
+                    <span className="font-medium">{pred.confidence}%</span>
+                  </p>
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
       </main>
     </div>
   );

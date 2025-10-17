@@ -5,7 +5,7 @@ from rest_framework.response import Response
 from rest_framework.decorators import api_view, parser_classes
 from rest_framework.parsers import MultiPartParser, FormParser
 from rest_framework import status
-from db_connections import doctors_collection, doctors_otp_collection, doctors_medical_img_info
+from db_connections import doctors_collection, doctors_otp_collection, doctors_medical_img_info, doctors_symptom_info
 import bcrypt, jwt
 from rest_framework.exceptions import AuthenticationFailed
 
@@ -386,3 +386,72 @@ def wrong_image_feedback(request):
 
     except Exception as e:
         return Response({"error": f"Internal error while updating feedback: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+@api_view(["POST"])
+def symptoms_assessment(request):
+    import joblib
+    import pandas as pd
+    import numpy as np
+    try:
+        token = request.headers.get('Authorization')
+        if not token:
+            raise AuthenticationFailed('Token missing')
+        token = token.split(" ")[1]
+        decoded_token = jwt.decode(token, settings.SECRET_KEY, algorithms=["HS256"])
+        doctor_id = decoded_token.get("user_id")
+        data = request.data
+        doctor_email = doctors_collection.find_one({"doctor_id": doctor_id}).get("peronsal_info", {}).get("email")
+        symptoms = data.get("symptoms")
+
+        if not symptoms or not isinstance(symptoms, list):
+            return Response({"error": "Invalid or missing data."}, status=status.HTTP_400_BAD_REQUEST)
+        MODEL_PATH = '../clg_ml/symptom_based_diseaese_detection/final_rf_model_top30.pkl'
+        ENCODER_PATH = '../clg_ml/symptom_based_diseaese_detection/label_encoder.pkl'
+        SYMPTOMS_PATH = '../clg_ml/symptom_based_diseaese_detection/selected_symptoms.csv'
+
+        rf_model = joblib.load(MODEL_PATH)
+        label_encoder = joblib.load(ENCODER_PATH)
+        selected_symptoms = pd.read_csv(SYMPTOMS_PATH).squeeze().tolist()
+
+        symptom_vector = [1 if symptom in symptoms else 0 for symptom in selected_symptoms]
+
+        probs = rf_model.predict_proba([symptom_vector])[0]
+        top_indices = np.argsort(probs)[-3:][::-1]
+        top_predictions = [
+            {
+                "disease": label_encoder.inverse_transform([i])[0],
+                "confidence": round(probs[i] * 100, 2)
+            }
+            for i in top_indices
+        ]
+
+        prediction_result = {
+            "top_predictions": top_predictions
+        }
+
+        record = {
+            "doctor_id": doctor_id,
+            "doctor_email": doctor_email,
+            "symptoms": symptoms,
+            "submitted_at": datetime.utcnow(),
+            "model_prediction": prediction_result,
+            "doctor_recommendation": None
+        }
+        insert_result = doctors_symptom_info.insert_one(record)
+
+        doctors_symptom_info.update_one(
+            {"_id": insert_result.inserted_id},
+            {"$set": {"doctor_symptoms_id": str(insert_result.inserted_id)}}
+        )
+
+        return Response({
+            "message": "Assessment submitted successfully.",
+            "model_prediction": prediction_result
+        }, status=status.HTTP_201_CREATED)
+    
+    except jwt.ExpiredSignatureError:
+        return Response({"error": "Token expired."}, status=status.HTTP_401_UNAUTHORIZED)
+    except jwt.InvalidTokenError:
+        return Response({"error": "Invalid token."}, status=status.HTTP_401_UNAUTHORIZED)
+    except Exception as e:
+        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
