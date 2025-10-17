@@ -1,20 +1,24 @@
-import React, { useState, useEffect } from "react";
-import PatientHeader from "../../components/PatientHeader.jsx";
-import { Link } from "react-router-dom";
-import axios from "axios";
+import React from "react";
+import DoctorHeader from "../../components/DoctorHeader.jsx";
 import Disclaimer from "../../components/Disclaimer.jsx";
-import ReportProblemOutlinedIcon from "@mui/icons-material/ReportProblemOutlined";
+import { useEffect, useState } from "react";
 
-const ResultsPage = () => {
+const DoctorRequestsPage = () => {
+  const mediaBaseURL = "http://localhost:8000/media/";
   const [imageClassifications, setImageClassifications] = useState([]);
   const [symptomPrediction, setSymptomPrediction] = useState([]);
+  const [recommendations, setRecommendations] = useState({});
+
+  const handleRecommendationChange = (id, value) => {
+    setRecommendations((prev) => ({ ...prev, [id]: value }));
+  };
 
   useEffect(() => {
     const fetchImageData = async () => {
       try {
         const token = localStorage.getItem("access_token");
         const res = await axios.get(
-          "http://127.0.0.1:8000/patient/image-classification-result/",
+          "http://127.0.0.1:8000/doctor/get-image-requests/",
           {
             headers: token ? { Authorization: `Bearer ${token}` } : {},
           }
@@ -32,7 +36,7 @@ const ResultsPage = () => {
       try {
         const token = localStorage.getItem("access_token");
         const res = await axios.get(
-          "http://127.0.0.1:8000/patient/symptom-prediction-result/",
+          "http://127.0.0.1:8000/doctor/symptom-prediction-request/",
           {
             headers: token ? { Authorization: `Bearer ${token}` } : {},
           }
@@ -47,13 +51,12 @@ const ResultsPage = () => {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <PatientHeader />
-      <main className="mx-auto max-w-5xl px-4 py-10 sm:px-6 lg:px-8">
-        <section className="text-center">
-          <h1 className="text-3xl font-bold text-gray-900">Results</h1>
-          <p className="mt-2 text-gray-600">Review previous input data.</p>
-        </section>
-        <div className="mt-6">
+      <DoctorHeader />
+      <main className="mx-auto max-w-6xl px-4 py-8">
+        <h1 className="text-2xl font-semibold text-gray-800 mb-6">
+          Patient Requests
+        </h1>
+        <div>
           <Disclaimer />
         </div>
 
@@ -63,33 +66,15 @@ const ResultsPage = () => {
             <div className="rounded-md border border-gray-200 bg-gray-50 p-3 text-sm text-gray-700">
               <div className="flex items-start gap-2">
                 <ReportProblemOutlinedIcon className="text-gray-700" />
-                <p>
-                  No analysis results found. Please upload images or enter
-                  symptoms first.
-                </p>
+                <p>No requests yet.</p>
               </div>
-            </div>
-
-            <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
-              <Link
-                to="/patient-dashboard/upload"
-                className="inline-flex items-center justify-center rounded-full bg-gray-900 px-5 py-2 text-sm font-semibold text-white hover:bg-gray-800"
-              >
-                Upload Images
-              </Link>
-              <Link
-                to="/patient-dashboard/symptoms"
-                className="inline-flex items-center justify-center rounded-full border border-gray-300 bg-white px-5 py-2 text-sm font-semibold text-gray-900 hover:bg-gray-50"
-              >
-                Enter Symptoms
-              </Link>
             </div>
           </div>
         ) : (
           <>
             <section className="mt-10">
               <h2 className="text-xl font-semibold text-gray-800 mb-4">
-                Image Classification
+                Image based request
               </h2>
               <div className="overflow-x-auto">
                 <table className="min-w-full border border-gray-300 divide-y divide-gray-200">
@@ -108,7 +93,7 @@ const ResultsPage = () => {
                         Medication (Hardcoded)
                       </th>
                       <th className="px-4 py-2 text-left text-xs font-medium text-gray-700 uppercase">
-                        Doctor Name
+                        Patient Name
                       </th>
                       <th className="px-4 py-2 text-left text-xs font-medium text-gray-700 uppercase">
                         Doctor Recommended Medication
@@ -121,7 +106,16 @@ const ResultsPage = () => {
                         <td className="px-4 py-2 text-sm">
                           {item.img_uploaded}
                         </td>
-                        <td className="px-4 py-2 text-sm">{item.file_name}</td>
+                        <td className="px-4 py-2 text-sm">
+                          <a
+                            href={`http://localhost:8000/media/patient_uploads/${item.file_name}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-blue-600 underline"
+                          >
+                            {item.file_name}
+                          </a>
+                        </td>
                         <td className="px-4 py-2 text-sm">
                           {item.prediction} {item.confidence}%
                         </td>
@@ -129,10 +123,35 @@ const ResultsPage = () => {
                           {item.hardcode_medication}
                         </td>
                         <td className="px-4 py-2 text-sm">
-                          {item.doctor_name}
+                          {item.patient_name}
                         </td>
                         <td className="px-4 py-2 text-sm">
-                          {item.doctor_recommendation || "Pending"}
+                          <div className="flex gap-2 items-start">
+                            <textarea
+                              className="w-full border rounded px-2 py-1"
+                              rows="2"
+                              value={
+                                recommendations[item._id] ||
+                                item.doctor_recommendation ||
+                                ""
+                              }
+                              onChange={(e) =>
+                                handleRecommendationChange(
+                                  item._id,
+                                  e.target.value
+                                )
+                              }
+                              placeholder="Write recommendation..."
+                            />
+                            <button
+                              onClick={() =>
+                                submitRecommendation(item._id, "image")
+                              }
+                              className="bg-blue-600 hover:bg-blue-500 text-white px-3 py-1 rounded text-sm"
+                            >
+                              Submit
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     ))}
@@ -161,7 +180,7 @@ const ResultsPage = () => {
                         Medication (Hardcoded) for Top prediction
                       </th>
                       <th className="px-4 py-2 text-left text-xs font-medium text-gray-700 uppercase">
-                        Doctor Name
+                        Patient Name
                       </th>
                       <th className="px-4 py-2 text-left text-xs font-medium text-gray-700 uppercase">
                         Doctor Recommended Medication
@@ -197,7 +216,32 @@ const ResultsPage = () => {
                           {item.doctor_name || "N/A"}
                         </td>
                         <td className="px-4 py-2 text-sm">
-                          {item.doctor_recommendation || "Pending"}
+                          <div className="flex gap-2 items-start">
+                            <textarea
+                              className="w-full border rounded px-2 py-1"
+                              rows="2"
+                              value={
+                                recommendations[item._id] ||
+                                item.doctor_recommendation ||
+                                ""
+                              }
+                              onChange={(e) =>
+                                handleRecommendationChange(
+                                  item._id,
+                                  e.target.value
+                                )
+                              }
+                              placeholder="Write recommendation..."
+                            />
+                            <button
+                              onClick={() =>
+                                submitRecommendation(item._id, "symptom")
+                              }
+                              className="bg-blue-600 hover:bg-blue-500 text-white px-3 py-1 rounded text-sm"
+                            >
+                              Submit
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     ))}
@@ -212,4 +256,4 @@ const ResultsPage = () => {
   );
 };
 
-export default ResultsPage;
+export default DoctorRequestsPage;

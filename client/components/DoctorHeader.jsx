@@ -5,10 +5,11 @@ import HomeOutlinedIcon from "@mui/icons-material/HomeOutlined";
 import FileUploadOutlinedIcon from "@mui/icons-material/FileUploadOutlined";
 import DriveFileRenameOutlineOutlinedIcon from "@mui/icons-material/DriveFileRenameOutlineOutlined";
 import CollectionsOutlinedIcon from "@mui/icons-material/CollectionsOutlined";
+import { toast } from "react-toastify";
 
 const DoctorHeader = () => {
   const navigate = useNavigate();
-
+  const [notify, setNotify] = useState(0);
   const [user, setUser] = useState({
     name:
       localStorage.getItem("user_name") ||
@@ -30,15 +31,56 @@ const DoctorHeader = () => {
         return;
       }
       try {
-        //api-call
+        const response = await axios.get(
+          "http://127.0.0.1:8000/doctor/dashboard/",
+          {
+            headers: {
+              Authorization: `Bearer ${token}`,
+            },
+          }
+        );
+        if (response.data) {
+          setUser({
+            name: response.data.name || user.name,
+            email: response.data.email || user.email,
+          });
+          localStorage.setItem("user_name", response.data.name || user.name);
+          localStorage.setItem("user_email", response.data.email || user.email);
+        }
       } catch (error) {
         if (error.response && error.response.status === 401) {
           handleLogout();
         }
       }
     }
-
     fetchUserData();
+  }, []);
+
+  useEffect(() => {
+    async function getNotifications() {
+      const token = localStorage.getItem("access_token");
+      if (!token) {
+        navigate("/doctor-login");
+        return;
+      }
+      try {
+        const response = await axios.get(
+          "http://127.0.0.1:8000/doctor/get-patient-notifications/",
+          {
+            headers: {
+              Authorization: `Bearer ${token}`,
+            },
+          }
+        );
+        if (response.data?.notify_count) {
+          setNotify(response.data.notify_count);
+        }
+      } catch (error) {
+        toast.error("Couldn't get patient notifications");
+        return;
+      }
+    }
+    getNotifications();
   }, []);
 
   const handleLogout = () => {
@@ -89,9 +131,14 @@ const DoctorHeader = () => {
               <DriveFileRenameOutlineOutlinedIcon />
               Symptoms
             </NavLink>
-            <NavLink to="/doctor-dashboard/results" className={linkClasses}>
+            <NavLink to="/doctor-dashboard/requests" className={linkClasses}>
               <CollectionsOutlinedIcon />
-              Results
+              Patient Requests
+              {notify > 0 && (
+                <span className="ml-2 inline-flex items-center justify-center rounded-full bg-red-600 px-2 py-0.5 text-xs font-bold text-white">
+                  {notify}
+                </span>
+              )}
             </NavLink>
           </nav>
 

@@ -16,7 +16,7 @@ import NotFound404Page from "../components/NotFound404Page";
 import UploadPage from "../pages/PatientDashboard/UploadImage";
 import DoctorUploadImage from "../pages/DoctorDashboard/DoctorUploadImage";
 import DoctorSymptomsAssessment from "../pages/DoctorDashboard/DoctorSymptomsAssessment";
-import DoctorResultsPage from "../pages/DoctorDashboard/DoctorResultsPage";
+import DoctorRequestsPage from "../pages/DoctorDashboard/DoctorRequestsPage";
 import SymptomAssessmentPage from "../pages/PatientDashboard/SymptomsAssessment";
 import ResultsPage from "../pages/PatientDashboard/ResultsPage";
 
@@ -45,8 +45,8 @@ const App = () => {
           element={<DoctorSymptomsAssessment />}
         />
         <Route
-          path="/doctor-dashboard/results"
-          element={<DoctorResultsPage />}
+          path="/doctor-dashboard/requests"
+          element={<DoctorRequestsPage />}
         />
         <Route path="/doctor-register" element={<DoctorRegistration />} />
         <Route path="/doctor-login" element={<DoctorLogin />} />

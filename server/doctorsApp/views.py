@@ -5,7 +5,7 @@ from rest_framework.response import Response
 from rest_framework.decorators import api_view, parser_classes
 from rest_framework.parsers import MultiPartParser, FormParser
 from rest_framework import status
-from db_connections import doctors_collection, doctors_otp_collection, doctors_medical_img_info, doctors_symptom_info
+from db_connections import doctors_collection, doctors_otp_collection, doctors_medical_img_info, doctors_symptom_info, doctor_requests, patient_collection
 import bcrypt, jwt
 from rest_framework.exceptions import AuthenticationFailed
 
@@ -166,6 +166,32 @@ def doctor_login(request):
     tokens = get_tokens_for_doctor(custom_doctor)
 
     return Response({"message": "Login successful", "tokens": tokens}, status=status.HTTP_200_OK)
+
+@api_view(["GET"])
+def get_patient_notification(request):
+    token = request.headers.get("Authorization")
+    if not token:
+        print("Token missing")
+        raise AuthenticationFailed('Token missing')
+    
+    try:
+        token = token.split(" ")[1]
+        decoded_token = jwt.decode(token, settings.SECRET_KEY, algorithms=["HS256"])
+        doctor_id = decoded_token.get('user_id')
+        print("doctor_id: ", doctor_id)
+
+        notify_count = doctor_requests.count_documents({"doctor_id": doctor_id, "status": "pending"})
+        return Response({"notify_count": notify_count}, status=status.HTTP_200_OK)
+
+    except jwt.ExpiredSignatureError:
+        return Response({"error": "Token has expired"}, status=status.HTTP_401_UNAUTHORIZED)
+    except jwt.DecodeError:
+        return Response({"error": "Token is invalid"}, status=status.HTTP_401_UNAUTHORIZED)
+    except AuthenticationFailed as auth_err:
+        return Response({"error": str(auth_err)}, status=status.HTTP_401_UNAUTHORIZED)
+    except Exception as err:
+        print(f"Unexpected error: {err}")
+        return Response({"error": "Internal server error"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 class CustomUser:
     def __init__(self, doctor_data):
@@ -387,6 +413,49 @@ def wrong_image_feedback(request):
     except Exception as e:
         return Response({"error": f"Internal error while updating feedback: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
+@api_view(["GET"])
+def get_image_requests(request):
+    try:
+        token = request.headers.get('Authorization')
+
+        if not token:
+            raise AuthenticationFailed('Token missing')
+        token = token.split(" ")[1]
+        decoded_token = jwt.decode(token, settings.SECRET_KEY, algorithms=["HS256"])
+        doctor_id = decoded_token.get('user_id')
+        patient_name = patient_collection.find_one()
+        medication_map = {
+            "eczema": "Topical corticosteroids and moisturizers (e.g., Hydrocortisone cream, CeraVe).",
+            "benign keratosis like lesion": "Cryotherapy or salicylic acid for removal; monitor regularly.",
+            "mouth ulcers": "Topical benzocaine gel and vitamin B12 supplements.",
+            "hypodontia": "Dental prosthetics consultation; temporary use of dental wax for comfort.",
+        }
+
+        records = doctor_requests.find({"doctor_id": doctor_id, "status": "pending", "type": "image"})
+        data = []
+
+        for record in records:
+            label = record.get("model_prediction", {}).get("final_label", "")
+            confidence = record.get("model_prediction", {}).get("prediction_confidence", "")
+            medication = medication_map.get(label.lower(), "Low confidence on image, consult your doctor for appropriate treatment.")
+            data.append({
+                "file_name": record.get("file_name"),
+                "prediction": label,
+                "confidence": confidence,
+                "hardcode_medication": medication,
+                "doctor_name": record.get("selected_doctor_name"),
+                "doctor_recommendation": record.get("doctor_recommendation", None),
+                "img_uploaded": record.get("uploaded_at").date().isoformat() if record.get("uploaded_at") else None,
+                "patient_name": patient_name
+            })
+        return Response({"image_requests": data})
+    except jwt.ExpiredSignatureError:
+        return Response({"error": "Token expired."}, status=status.HTTP_401_UNAUTHORIZED)
+    except jwt.InvalidTokenError:
+        return Response({"error": "Invalid token."}, status=status.HTTP_401_UNAUTHORIZED)
+    except Exception as e:
+        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
 @api_view(["POST"])
 def symptoms_assessment(request):
     import joblib
@@ -449,6 +518,89 @@ def symptoms_assessment(request):
             "model_prediction": prediction_result
         }, status=status.HTTP_201_CREATED)
     
+    except jwt.ExpiredSignatureError:
+        return Response({"error": "Token expired."}, status=status.HTTP_401_UNAUTHORIZED)
+    except jwt.InvalidTokenError:
+        return Response({"error": "Invalid token."}, status=status.HTTP_401_UNAUTHORIZED)
+    except Exception as e:
+        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+@api_view(["GET"])
+def get_symptom_requests(request):
+    try:
+        token = request.headers.get('Authorization')
+        if not token:
+            raise AuthenticationFailed('Token missing')
+        token = token.split(" ")[1]
+        decoded_token = jwt.decode(token, settings.SECRET_KEY, algorithms=["HS256"])
+        doctor_id = decoded_token.get('user_id')
+        records = doctor_requests.find({"doctor_id": doctor_id, "status": "pending", "type": "symptoms"})
+
+        data = []
+        medication_map = {
+            "Fungal infection": [{"name": "Clotrimazole", "purpose": "Antifungal cream"}, {"name": "Fluconazole", "purpose": "Oral antifungal"}],
+            "Allergy": [{"name": "Cetirizine", "purpose": "Allergy relief"}, {"name": "Loratadine", "purpose": "Reduce allergic reaction"}],
+            "GERD": [{"name": "Omeprazole", "purpose": "Reduce stomach acid"}, {"name": "Ranitidine", "purpose": "Relieve heartburn"}],
+            "Chronic cholestasis": [{"name": "Ursodeoxycholic acid", "purpose": "Improve bile flow"}],
+            "Drug Reaction": [{"name": "Antihistamines", "purpose": "Counter allergic response"}, {"name": "Topical steroids", "purpose": "Reduce inflammation"}],
+            "Peptic ulcer diseae": [{"name": "Pantoprazole", "purpose": "Reduce stomach acid"}, {"name": "Antacids", "purpose": "Neutralize acid"}],
+            "AIDS": [{"name": "Antiretroviral Therapy (ART)", "purpose": "Control HIV"}],
+            "Diabetes ": [{"name": "Metformin", "purpose": "Control blood sugar"}, {"name": "Insulin", "purpose": "Regulate glucose"}],
+            "Gastroenteritis": [{"name": "ORS", "purpose": "Prevent dehydration"}, {"name": "Loperamide", "purpose": "Control diarrhea"}],
+            "Bronchial Asthma": [{"name": "Salbutamol", "purpose": "Relieve breathing"}, {"name": "Steroids inhaler", "purpose": "Reduce inflammation"}],
+            "Hypertension ": [{"name": "Amlodipine", "purpose": "Lower blood pressure"}, {"name": "Losartan", "purpose": "Relax blood vessels"}],
+            "Migraine": [{"name": "Sumatriptan", "purpose": "Relieve migraine"}, {"name": "Ibuprofen", "purpose": "Pain relief"}],
+            "Cervical spondylosis": [{"name": "NSAIDs", "purpose": "Reduce pain/inflammation"}, {"name": "Physiotherapy", "purpose": "Muscle strengthening"}],
+            "Paralysis (brain hemorrhage)": [{"name": "Blood pressure control meds", "purpose": "Prevent further damage"}, {"name": "Physiotherapy", "purpose": "Rehabilitation"}],
+            "Jaundice": [{"name": "Hepatoprotective agents", "purpose": "Liver support"}, {"name": "Glucose & fluids", "purpose": "Hydration"}],
+            "Malaria": [{"name": "Chloroquine", "purpose": "Kill malaria parasites"}, {"name": "Paracetamol", "purpose": "Reduce fever"}],
+            "Chicken pox": [{"name": "Calamine lotion", "purpose": "Soothe skin"}, {"name": "Acyclovir", "purpose": "Antiviral"}],
+            "Dengue": [{"name": "Paracetamol", "purpose": "Fever reduction"}, {"name": "ORS", "purpose": "Prevent dehydration"}],
+            "Typhoid": [{"name": "Ciprofloxacin", "purpose": "Antibiotic"}, {"name": "ORS", "purpose": "Hydration"}],
+            "hepatitis A": [{"name": "Rest & hydration", "purpose": "Liver recovery"}],
+            "Hepatitis B": [{"name": "Antivirals", "purpose": "Reduce liver inflammation"}],
+            "Hepatitis C": [{"name": "Direct-acting antivirals", "purpose": "Virus elimination"}],
+            "Hepatitis D": [{"name": "Interferon alfa", "purpose": "Reduce viral load"}],
+            "Hepatitis E": [{"name": "Supportive care", "purpose": "Liver healing"}],
+            "Alcoholic hepatitis": [{"name": "Steroids", "purpose": "Liver inflammation"}, {"name": "Abstinence", "purpose": "Avoid alcohol"}],
+            "Tuberculosis": [{"name": "Rifampin + Isoniazid", "purpose": "Kill TB bacteria"}],
+            "Common Cold": [{"name": "Paracetamol", "purpose": "Fever"}, {"name": "Decongestants", "purpose": "Clear nose"}],
+            "Pneumonia": [{"name": "Azithromycin", "purpose": "Antibiotic"}, {"name": "Cough syrup", "purpose": "Soothe throat"}],
+            "Dimorphic hemmorhoids(piles)": [{"name": "Sitz bath", "purpose": "Pain relief"}, {"name": "Topical ointments", "purpose": "Shrink swelling"}],
+            "Heart attack": [{"name": "Aspirin", "purpose": "Prevent clot"}, {"name": "Nitroglycerin", "purpose": "Relieve chest pain"}],
+            "Varicose veins": [{"name": "Compression stockings", "purpose": "Improve circulation"}, {"name": "Pain relievers", "purpose": "Relieve pain"}],
+            "Hypothyroidism": [{"name": "Levothyroxine", "purpose": "Thyroid hormone replacement"}],
+            "Hyperthyroidism": [{"name": "Methimazole", "purpose": "Suppress thyroid hormone"}],
+            "Hypoglycemia": [{"name": "Glucose tablets", "purpose": "Raise blood sugar"}, {"name": "Sugary snacks", "purpose": "Immediate sugar"}],
+            "Osteoarthristis": [{"name": "NSAIDs", "purpose": "Pain relief"}, {"name": "Physiotherapy", "purpose": "Joint mobility"}],
+            "Arthritis": [{"name": "DMARDs", "purpose": "Slow disease"}, {"name": "NSAIDs", "purpose": "Pain/inflammation"}],
+            "(vertigo) Paroymsal  Positional Vertigo": [{"name": "Meclizine", "purpose": "Reduce dizziness"}, {"name": "Vestibular rehab", "purpose": "Balance training"}],
+            "Acne": [{"name": "Benzoyl peroxide", "purpose": "Reduce acne"}, {"name": "Salicylic acid", "purpose": "Clean pores"}],
+            "Urinary tract infection": [{"name": "Nitrofurantoin", "purpose": "Kill bacteria"}, {"name": "Cranberry juice", "purpose": "Prevention"}],
+            "Psoriasis": [{"name": "Topical corticosteroids", "purpose": "Reduce skin scaling"}, {"name": "Moisturizers", "purpose": "Soothe skin"}],
+            "Impetigo": [{"name": "Mupirocin", "purpose": "Topical antibiotic"}, {"name": "Oral antibiotics", "purpose": "Severe cases"}],
+        }
+
+        for record in records:
+            top_predictions = record.get("model_prediction", {}).get("top_predictions", [])
+            top_disease = top_predictions[0]["disease"] if top_predictions else None
+            top_confidence = top_predictions[0]["confidence"] if top_predictions else 0
+
+
+            if top_predictions and top_confidence < 20:
+                medications = "Low confidence on symptom prediction, consult your doctor for appropriate treatment."
+            else:
+                medications = medication_map.get(top_disease, [])
+
+            data.append({
+                "symptoms": record.get("symptoms", []),
+                "top_predictions": top_predictions,
+                "hardcode_medication": medications,
+                "submitted_at": record.get("submitted_at").date().isoformat() if record.get("submitted_at") else None,
+                "patient_name": patient_name
+            })
+        return Response({"assessments": data}, status=status.HTTP_200_OK)
+
     except jwt.ExpiredSignatureError:
         return Response({"error": "Token expired."}, status=status.HTTP_401_UNAUTHORIZED)
     except jwt.InvalidTokenError:

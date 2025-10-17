@@ -7,7 +7,7 @@ from rest_framework.decorators import api_view, parser_classes
 from rest_framework.parsers import MultiPartParser, FormParser
 from rest_framework.exceptions import AuthenticationFailed
 from rest_framework import status
-from db_connections import patient_collection, patient_otp_collection, patient_medical_info, patient_medical_img_info, doctors_collection
+from db_connections import patient_collection, patient_otp_collection, patient_medical_info, patient_medical_img_info, doctors_collection, doctor_requests
 import bcrypt
 from mailjetMailSender import send_email
 from rest_framework_simplejwt.tokens import RefreshToken
@@ -200,6 +200,7 @@ def upload_medical_image(request):
         decoded_token = jwt.decode(token, settings.SECRET_KEY, algorithms=["HS256"])
         patient_id = decoded_token.get('user_id')
         email = patient_collection.find_one({"patient_id": patient_id}).get("email")
+        patient_name = patient_collection.find_one({"patient_id": patient_id}).get("name")
 
         file_content = file.read()
         file_hash = md5(file_content).hexdigest()
@@ -268,6 +269,21 @@ def upload_medical_image(request):
                 }
             }
         )
+
+        if doctor_doc:
+            doctor_requests.insert_one({
+                "patient_name": patient_name,
+                "patient_id": patient_id,
+                "doctor_name": selected_doctor_name,
+                "doctor_id": selected_doctor_id,
+                "submitted_at": datetime.utcnow(),
+                "file_name": file.name,
+                "content_type": file.content_type,
+                "file_data": file_content,
+                "file_hash": file_hash,
+                "status": "pending",
+                "type": "image"
+            })
 
         result = {
             "message": "Image uploaded and classified successfully",
@@ -345,6 +361,7 @@ def symptom_assessment(request):
         token = request.headers.get("Authorization", "").split(" ")[1]
         decoded_token = jwt.decode(token, settings.SECRET_KEY, algorithms=["HS256"])
         patient_id = decoded_token.get("user_id")
+        patient_name = patient_collection.find_one({"patient_id": patient_id}).get("name")
         data = request.data
         email = patient_collection.find_one({"patient_id": patient_id}).get("email")
         selected_doctor_id = data.get("selected_doctor")
@@ -395,6 +412,19 @@ def symptom_assessment(request):
             {"_id": insert_result.inserted_id},
             {"$set": {"patient_symptoms_id": str(insert_result.inserted_id)}}
         )
+
+        if doctor_doc:
+            doctor_requests.insert_one({
+                "patient_name": patient_name,
+                "patient_id": patient_id,
+                "doctor_name": selected_doctor_name,
+                "doctor_id": selected_doctor_id,
+                "symptoms": symptoms,
+                "submitted_at": datetime.utcnow(),
+                "top_model_predictions": top_predictions,
+                "status": "pending",
+                "type": "symptoms"
+            })
 
         return Response({
             "message": "Assessment submitted successfully.",
@@ -474,7 +504,6 @@ def get_symptoms_prediction(request):
                 medications = "Low confidence on symptom prediction, consult your doctor for appropriate treatment."
             else:
                 medications = medication_map.get(top_disease, [])
-            print("medications: ", medications)
             data.append({
                 "symptoms": record.get("symptoms", []),
                 "top_predictions": top_predictions,
