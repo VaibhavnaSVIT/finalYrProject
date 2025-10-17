@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import PatientHeader from "../../components/PatientHeader.jsx";
 import axios from "axios";
 import Disclaimer from "../../components/Disclaimer.jsx";
@@ -50,6 +50,8 @@ const SymptomAssessmentPage = () => {
 
   const [symptoms, setSymptoms] = useState([]);
   const [predictions, setPredictions] = useState([]);
+  const [doctors, setDoctors] = useState([]);
+  const [selectedDoctor, setSelectedDoctor] = useState("");
 
   const addQuickSymptom = (s) => {
     if (symptoms.find((x) => x.name === s)) {
@@ -83,7 +85,7 @@ const SymptomAssessmentPage = () => {
     setSymptoms((prev) => prev.filter((s) => s.name !== name));
 
   const submitAssessment = async () => {
-    if (!symptoms.length > 7) {
+    if (symptoms.length < 7) {
       console.log("symptoms length: ", symptoms.length);
       toast.error(
         "Please add minimum of 7 symptoms for better results from model."
@@ -97,6 +99,7 @@ const SymptomAssessmentPage = () => {
         "http://127.0.0.1:8000/patient/symptom-assessment/",
         {
           symptoms: symptomNames,
+          selected_doctor: selectedDoctor,
         },
         {
           headers: {
@@ -119,6 +122,25 @@ const SymptomAssessmentPage = () => {
       console.error(err);
     }
   };
+
+  useEffect(() => {
+    const fetchDoctors = async () => {
+      try {
+        const token = localStorage.getItem("access_token");
+        const res = await axios.get(
+          "http://127.0.0.1:8000/patient/list-doctors/",
+          {
+            headers: token ? { Authorization: `Bearer ${token}` } : {},
+          }
+        );
+        setDoctors(res.data.doctors);
+      } catch (err) {
+        console.error("Error fetching doctors:", err);
+        toast.error("Could not load doctor list.");
+      }
+    };
+    fetchDoctors();
+  }, []);
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -151,7 +173,7 @@ const SymptomAssessmentPage = () => {
 
           <div className="mt-4">
             <p className="text-sm font-medium text-gray-700">
-              Quick Select Common Symptoms:
+              Enter Symptoms from below list:
             </p>
             <div className="mt-2 flex flex-wrap gap-2">
               {COMMON_SYMPTOMS.map((s) => (
@@ -167,111 +189,80 @@ const SymptomAssessmentPage = () => {
             </div>
           </div>
 
-          <div className="mt-6 grid gap-4 sm:grid-cols-2">
-            <div>
-              <label className="block text-sm font-medium text-gray-700">
-                Symptom Name <span className="text-red-500">*</span>
-              </label>
-              <input
-                type="text"
-                placeholder="Enter symptom name"
-                className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none ring-gray-900/10 focus:ring-2"
-                value={entry.name}
-                onChange={(e) =>
-                  setEntry((prev) => ({ ...prev, name: e.target.value }))
-                }
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700">
-                Severity Level <span className="text-red-500">*</span>
-              </label>
-              <select
-                className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none ring-gray-900/10 focus:ring-2"
-                value={entry.severity}
-                onChange={(e) =>
-                  setEntry((prev) => ({ ...prev, severity: e.target.value }))
-                }
-              >
-                <option value="">Select severity</option>
-                {severities.map((s) => (
-                  <option key={s} value={s}>
-                    {s}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700">
-                Duration
-              </label>
-              <input
-                type="text"
-                placeholder="e.g., 3 days, 2 weeks, ongoing"
-                className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none ring-gray-900/10 focus:ring-2"
-                value={entry.duration}
-                onChange={(e) =>
-                  setEntry((prev) => ({ ...prev, duration: e.target.value }))
-                }
-              />
-            </div>
-
-            <div className="flex items-end">
-              <button
-                type="button"
-                onClick={addSymptom}
-                className="inline-flex w-full items-center justify-center rounded-md bg-gray-700 px-4 py-2 text-sm font-semibold text-white hover:bg-gray-800"
-              >
-                + Add Symptom
-              </button>
-            </div>
-          </div>
-
-          {symptoms.length > 0 && (
-            <div className="mt-6">
-              <h3 className="text-sm font-semibold text-gray-900">
-                Added Symptoms
-              </h3>
-              <ul className="mt-2 divide-y divide-gray-200 rounded-md border">
-                {symptoms.map((s) => (
-                  <li
-                    key={s.name}
-                    className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 text-sm"
-                  >
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="font-medium text-gray-900">
-                        {s.name}
-                      </span>
-                      <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-700">
-                        {s.severity}
-                      </span>
-                      {s.duration && (
-                        <span className="text-xs text-gray-500">
-                          {s.duration}
-                        </span>
-                      )}
-                    </div>
-                    <button
-                      onClick={() => removeSymptom(s.name)}
-                      className="rounded bg-gray-100 px-2 py-1 text-xs font-medium text-gray-700 hover:bg-gray-200"
+          <div className="mt-6">
+            {symptoms.length > 0 && (
+              <div className="mb-6">
+                <h3 className="text-sm font-semibold text-gray-900">
+                  Added Symptoms
+                </h3>
+                <ul className="mt-2 divide-y divide-gray-200 rounded-md border">
+                  {symptoms.map((s) => (
+                    <li
+                      key={s.name}
+                      className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 text-sm"
                     >
-                      Remove
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="font-medium text-gray-900">
+                          {s.name}
+                        </span>
+                        <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-700">
+                          {s.severity}
+                        </span>
+                        {s.duration && (
+                          <span className="text-xs text-gray-500">
+                            {s.duration}
+                          </span>
+                        )}
+                      </div>
+                      <button
+                        onClick={() => removeSymptom(s.name)}
+                        className="rounded bg-gray-100 px-2 py-1 text-xs font-medium text-gray-700 hover:bg-gray-200"
+                      >
+                        Remove
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
 
-          <div className="mt-6 flex justify-end">
-            <button
-              onClick={submitAssessment}
-              className="inline-flex items-center rounded-full bg-gray-900 px-5 py-2 text-sm font-semibold text-white hover:bg-gray-800"
-            >
-              Save Assessment
-            </button>
+            <div className="flex flex-wrap items-end justify-between gap-4">
+              <div>
+                {doctors.length > 0 && (
+                  <div>
+                    <label
+                      htmlFor="doctor"
+                      className="block text-sm font-medium text-gray-700 mb-1"
+                    >
+                      Choose a doctor to send the results:
+                    </label>
+                    <select
+                      id="doctor"
+                      name="doctor"
+                      value={selectedDoctor}
+                      onChange={(e) => setSelectedDoctor(e.target.value)}
+                      className="rounded-md border border-gray-300 bg-white py-2 px-3 shadow-sm focus:border-gray-900 focus:outline-none focus:ring-gray-900 sm:text-sm"
+                    >
+                      <option value="">-- Select a Doctor --</option>
+                      {doctors.map((doc) => (
+                        <option key={doc.doctor_id} value={doc.doctor_id}>
+                          {doc.personal_info?.fullName || "Unnamed Doctor"}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+              </div>
+
+              <div className="self-end">
+                <button
+                  onClick={submitAssessment}
+                  className="inline-flex items-center rounded-full bg-gray-900 px-5 py-2 text-sm font-semibold text-white hover:bg-gray-800"
+                >
+                  Save Assessment
+                </button>
+              </div>
+            </div>
           </div>
         </section>
         {predictions.length > 0 && (
@@ -279,6 +270,14 @@ const SymptomAssessmentPage = () => {
             <h2 className="text-lg font-semibold text-gray-900 text-center mb-4">
               Top 3 Model Predictions.
             </h2>
+
+            {predictions[0].confidence < 20 && (
+              <div className="mb-4 rounded bg-red-100 p-4 text-center text-red-700 font-semibold">
+                The model's confidence is below 20%. Please consider consulting
+                a doctor for further evaluation.
+              </div>
+            )}
+
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               {predictions.map((pred, idx) => (
                 <div

@@ -165,9 +165,9 @@ def upload_medical_image(request):
     from io import BytesIO
     from PIL import Image
 
-    DOMAIN_MODEL_PATH = "/home/vaibhav/Documents/actualProjects/majorProject/clg_ml/domain_classifier_best.h5"
-    ORAL_MODEL_PATH = "/home/vaibhav/Documents/actualProjects/majorProject/clg_ml/oral_disorder_model.h5"
-    SKIN_MODEL_PATH = "/home/vaibhav/Documents/actualProjects/majorProject/clg_ml/skin_diseases_model.h5"
+    DOMAIN_MODEL_PATH = "../clg_ml/domain_classifier_best.h5"
+    ORAL_MODEL_PATH = "../clg_ml/oral_disorder_model.h5"
+    SKIN_MODEL_PATH = "../clg_ml/skin_diseases_model.h5"
     IMG_SIZE = (224, 224)
 
     oral_classes = ['hypodontia', 'mouth_ulcers']
@@ -264,7 +264,7 @@ def upload_medical_image(request):
             {
                 "$set": {
                     "model_prediction": model_prediction,
-                    "doctor_recommendation": None  # to be set later
+                    "doctor_recommendation": None
                 }
             }
         )
@@ -323,7 +323,9 @@ def get_image_classifications(request):
                 "confidence": confidence,
                 "hardcode_medication": medication,
                 "doctor_name": record.get("selected_doctor_name"),
-                "doctor_recommendation": record.get("doctor_recommendation", None)
+                "doctor_recommendation": record.get("doctor_recommendation", None),
+                "img_uploaded": record.get("uploaded_at").date().isoformat() if record.get("uploaded_at") else None
+
             })
         return Response({"classifications": data})
     
@@ -343,16 +345,19 @@ def symptom_assessment(request):
         token = request.headers.get("Authorization", "").split(" ")[1]
         decoded_token = jwt.decode(token, settings.SECRET_KEY, algorithms=["HS256"])
         patient_id = decoded_token.get("user_id")
-        email = patient_collection.find_one({"patient_id": patient_id}).get("email")
         data = request.data
+        email = patient_collection.find_one({"patient_id": patient_id}).get("email")
+        selected_doctor_id = data.get("selected_doctor")
+        doctor_doc = doctors_collection.find_one({"doctor_id": selected_doctor_id})
+        selected_doctor_name = doctor_doc.get("personal_info", {}).get("fullName") if doctor_doc else None
         symptoms = data.get("symptoms")
 
         if not symptoms or not isinstance(symptoms, list):
             return Response({"error": "Invalid or missing data."}, status=status.HTTP_400_BAD_REQUEST)
         
-        MODEL_PATH = '/home/vaibhav/Documents/actualProjects/majorProject/clg_ml/symptom_based_diseaese_detection/final_rf_model_top30.pkl'
-        ENCODER_PATH = '/home/vaibhav/Documents/actualProjects/majorProject/clg_ml/symptom_based_diseaese_detection/label_encoder.pkl'
-        SYMPTOMS_PATH = '/home/vaibhav/Documents/actualProjects/majorProject/clg_ml/symptom_based_diseaese_detection/selected_symptoms.csv'
+        MODEL_PATH = '../clg_ml/symptom_based_diseaese_detection/final_rf_model_top30.pkl'
+        ENCODER_PATH = '../clg_ml/symptom_based_diseaese_detection/label_encoder.pkl'
+        SYMPTOMS_PATH = '../clg_ml/symptom_based_diseaese_detection/selected_symptoms.csv'
 
         rf_model = joblib.load(MODEL_PATH)
         label_encoder = joblib.load(ENCODER_PATH)
@@ -380,6 +385,7 @@ def symptom_assessment(request):
             "submitted_at": datetime.utcnow(),
             "doc_verification_status": "pending",
             "model_prediction": prediction_result,
+            "selected_doctor_name": selected_doctor_name,
             "doctor_recommendation": None
         }
 
@@ -394,6 +400,91 @@ def symptom_assessment(request):
             "message": "Assessment submitted successfully.",
             "model_prediction": prediction_result
         }, status=status.HTTP_201_CREATED)
+
+    except jwt.ExpiredSignatureError:
+        return Response({"error": "Token expired."}, status=status.HTTP_401_UNAUTHORIZED)
+    except jwt.InvalidTokenError:
+        return Response({"error": "Invalid token."}, status=status.HTTP_401_UNAUTHORIZED)
+    except Exception as e:
+        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+@api_view(["GET"])
+def get_symptoms_prediction(request):
+    try:
+        token = request.headers.get('Authorization')
+        if not token:
+            raise AuthenticationFailed('Token missing')
+        token = token.split(" ")[1]
+        decoded_token = jwt.decode(token, settings.SECRET_KEY, algorithms=["HS256"])
+        patient_id = decoded_token.get('user_id')
+        records = patient_medical_info.find({"patient_id": patient_id})
+        data = []
+
+        medication_map = {
+            "Fungal infection": [{"name": "Clotrimazole", "purpose": "Antifungal cream"}, {"name": "Fluconazole", "purpose": "Oral antifungal"}],
+            "Allergy": [{"name": "Cetirizine", "purpose": "Allergy relief"}, {"name": "Loratadine", "purpose": "Reduce allergic reaction"}],
+            "GERD": [{"name": "Omeprazole", "purpose": "Reduce stomach acid"}, {"name": "Ranitidine", "purpose": "Relieve heartburn"}],
+            "Chronic cholestasis": [{"name": "Ursodeoxycholic acid", "purpose": "Improve bile flow"}],
+            "Drug Reaction": [{"name": "Antihistamines", "purpose": "Counter allergic response"}, {"name": "Topical steroids", "purpose": "Reduce inflammation"}],
+            "Peptic ulcer diseae": [{"name": "Pantoprazole", "purpose": "Reduce stomach acid"}, {"name": "Antacids", "purpose": "Neutralize acid"}],
+            "AIDS": [{"name": "Antiretroviral Therapy (ART)", "purpose": "Control HIV"}],
+            "Diabetes ": [{"name": "Metformin", "purpose": "Control blood sugar"}, {"name": "Insulin", "purpose": "Regulate glucose"}],
+            "Gastroenteritis": [{"name": "ORS", "purpose": "Prevent dehydration"}, {"name": "Loperamide", "purpose": "Control diarrhea"}],
+            "Bronchial Asthma": [{"name": "Salbutamol", "purpose": "Relieve breathing"}, {"name": "Steroids inhaler", "purpose": "Reduce inflammation"}],
+            "Hypertension ": [{"name": "Amlodipine", "purpose": "Lower blood pressure"}, {"name": "Losartan", "purpose": "Relax blood vessels"}],
+            "Migraine": [{"name": "Sumatriptan", "purpose": "Relieve migraine"}, {"name": "Ibuprofen", "purpose": "Pain relief"}],
+            "Cervical spondylosis": [{"name": "NSAIDs", "purpose": "Reduce pain/inflammation"}, {"name": "Physiotherapy", "purpose": "Muscle strengthening"}],
+            "Paralysis (brain hemorrhage)": [{"name": "Blood pressure control meds", "purpose": "Prevent further damage"}, {"name": "Physiotherapy", "purpose": "Rehabilitation"}],
+            "Jaundice": [{"name": "Hepatoprotective agents", "purpose": "Liver support"}, {"name": "Glucose & fluids", "purpose": "Hydration"}],
+            "Malaria": [{"name": "Chloroquine", "purpose": "Kill malaria parasites"}, {"name": "Paracetamol", "purpose": "Reduce fever"}],
+            "Chicken pox": [{"name": "Calamine lotion", "purpose": "Soothe skin"}, {"name": "Acyclovir", "purpose": "Antiviral"}],
+            "Dengue": [{"name": "Paracetamol", "purpose": "Fever reduction"}, {"name": "ORS", "purpose": "Prevent dehydration"}],
+            "Typhoid": [{"name": "Ciprofloxacin", "purpose": "Antibiotic"}, {"name": "ORS", "purpose": "Hydration"}],
+            "hepatitis A": [{"name": "Rest & hydration", "purpose": "Liver recovery"}],
+            "Hepatitis B": [{"name": "Antivirals", "purpose": "Reduce liver inflammation"}],
+            "Hepatitis C": [{"name": "Direct-acting antivirals", "purpose": "Virus elimination"}],
+            "Hepatitis D": [{"name": "Interferon alfa", "purpose": "Reduce viral load"}],
+            "Hepatitis E": [{"name": "Supportive care", "purpose": "Liver healing"}],
+            "Alcoholic hepatitis": [{"name": "Steroids", "purpose": "Liver inflammation"}, {"name": "Abstinence", "purpose": "Avoid alcohol"}],
+            "Tuberculosis": [{"name": "Rifampin + Isoniazid", "purpose": "Kill TB bacteria"}],
+            "Common Cold": [{"name": "Paracetamol", "purpose": "Fever"}, {"name": "Decongestants", "purpose": "Clear nose"}],
+            "Pneumonia": [{"name": "Azithromycin", "purpose": "Antibiotic"}, {"name": "Cough syrup", "purpose": "Soothe throat"}],
+            "Dimorphic hemmorhoids(piles)": [{"name": "Sitz bath", "purpose": "Pain relief"}, {"name": "Topical ointments", "purpose": "Shrink swelling"}],
+            "Heart attack": [{"name": "Aspirin", "purpose": "Prevent clot"}, {"name": "Nitroglycerin", "purpose": "Relieve chest pain"}],
+            "Varicose veins": [{"name": "Compression stockings", "purpose": "Improve circulation"}, {"name": "Pain relievers", "purpose": "Relieve pain"}],
+            "Hypothyroidism": [{"name": "Levothyroxine", "purpose": "Thyroid hormone replacement"}],
+            "Hyperthyroidism": [{"name": "Methimazole", "purpose": "Suppress thyroid hormone"}],
+            "Hypoglycemia": [{"name": "Glucose tablets", "purpose": "Raise blood sugar"}, {"name": "Sugary snacks", "purpose": "Immediate sugar"}],
+            "Osteoarthristis": [{"name": "NSAIDs", "purpose": "Pain relief"}, {"name": "Physiotherapy", "purpose": "Joint mobility"}],
+            "Arthritis": [{"name": "DMARDs", "purpose": "Slow disease"}, {"name": "NSAIDs", "purpose": "Pain/inflammation"}],
+            "(vertigo) Paroymsal  Positional Vertigo": [{"name": "Meclizine", "purpose": "Reduce dizziness"}, {"name": "Vestibular rehab", "purpose": "Balance training"}],
+            "Acne": [{"name": "Benzoyl peroxide", "purpose": "Reduce acne"}, {"name": "Salicylic acid", "purpose": "Clean pores"}],
+            "Urinary tract infection": [{"name": "Nitrofurantoin", "purpose": "Kill bacteria"}, {"name": "Cranberry juice", "purpose": "Prevention"}],
+            "Psoriasis": [{"name": "Topical corticosteroids", "purpose": "Reduce skin scaling"}, {"name": "Moisturizers", "purpose": "Soothe skin"}],
+            "Impetigo": [{"name": "Mupirocin", "purpose": "Topical antibiotic"}, {"name": "Oral antibiotics", "purpose": "Severe cases"}],
+        }
+
+        for record in records:
+            top_predictions = record.get("model_prediction", {}).get("top_predictions", [])
+            top_disease = top_predictions[0]["disease"] if top_predictions else None
+            top_confidence = top_predictions[0]["confidence"] if top_predictions else 0
+
+
+            if top_predictions and top_confidence < 20:
+                medications = "Low confidence on symptom prediction, consult your doctor for appropriate treatment."
+            else:
+                medications = medication_map.get(top_disease, [])
+            print("medications: ", medications)
+            data.append({
+                "symptoms": record.get("symptoms", []),
+                "top_predictions": top_predictions,
+                "doc_verification_status": record.get("doc_verification_status", "pending"),
+                "doctor_name": record.get("selected_doctor_name"),
+                "doctor_recommendation": record.get("doctor_recommendation", None),
+                "hardcode_medication": medications,
+                "submitted_at": record.get("submitted_at").date().isoformat() if record.get("submitted_at") else None
+            })
+        return Response({"assessments": data}, status=status.HTTP_200_OK)
 
     except jwt.ExpiredSignatureError:
         return Response({"error": "Token expired."}, status=status.HTTP_401_UNAUTHORIZED)
