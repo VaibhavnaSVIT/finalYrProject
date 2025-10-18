@@ -196,13 +196,18 @@ def upload_medical_image(request):
         return Response({"error": "No file uploaded under 'images' key"}, status=status.HTTP_400_BAD_REQUEST)
 
     try:
+        upload_dir = os.path.join(settings.MEDIA_ROOT, 'patient_uploads')
+        os.makedirs(upload_dir, exist_ok=True)
+
+        file_content = file.read()
+        file_path = os.path.join(upload_dir, file.name)
+        with open(file_path, 'wb') as f:
+            f.write(file_content)
         token = token.split(" ")[1]
         decoded_token = jwt.decode(token, settings.SECRET_KEY, algorithms=["HS256"])
         patient_id = decoded_token.get('user_id')
         email = patient_collection.find_one({"patient_id": patient_id}).get("email")
         patient_name = patient_collection.find_one({"patient_id": patient_id}).get("name")
-
-        file_content = file.read()
         file_hash = md5(file_content).hexdigest()
 
         existing = patient_medical_img_info.find_one({
@@ -217,13 +222,13 @@ def upload_medical_image(request):
             "patient_email": email,
             "file_name": file.name,
             "content_type": file.content_type,
-            "file_data": file_content,
             "file_hash": file_hash,
             "uploaded_at": datetime.utcnow(),
             "doc_verification_status": "pending",
             "analysis_type": "image",
             "patient_id": patient_id,
             "selected_doctor_name": selected_doctor_name,
+            "selected_doctor_id": selected_doctor_id
         }
 
         insert_result = patient_medical_img_info.insert_one(record)
@@ -231,6 +236,7 @@ def upload_medical_image(request):
             {"_id": insert_result.inserted_id},
             {"$set": {"patient_medical_img_id": str(insert_result.inserted_id)}}
         )
+        patient_medical_img_id = str(insert_result.inserted_id)
 
         file_io = BytesIO(file_content)
         img_array = preprocess_image_from_file(file_io)
@@ -282,7 +288,8 @@ def upload_medical_image(request):
                 "file_data": file_content,
                 "file_hash": file_hash,
                 "status": "pending",
-                "type": "image"
+                "type": "image",
+                "patient_medical_img_id": patient_medical_img_id
             })
 
         result = {
@@ -403,7 +410,9 @@ def symptom_assessment(request):
             "doc_verification_status": "pending",
             "model_prediction": prediction_result,
             "selected_doctor_name": selected_doctor_name,
-            "doctor_recommendation": None
+            "selected_doctor_id": selected_doctor_id,
+            "doctor_recommendation": None,
+            "analysis_type": "symptoms"
         }
 
         insert_result = patient_medical_info.insert_one(record)
@@ -412,6 +421,7 @@ def symptom_assessment(request):
             {"_id": insert_result.inserted_id},
             {"$set": {"patient_symptoms_id": str(insert_result.inserted_id)}}
         )
+        patient_symptoms_id = str(insert_result.inserted_id)
 
         if doctor_doc:
             doctor_requests.insert_one({
@@ -423,7 +433,8 @@ def symptom_assessment(request):
                 "submitted_at": datetime.utcnow(),
                 "top_model_predictions": top_predictions,
                 "status": "pending",
-                "type": "symptoms"
+                "type": "symptoms",
+                "patient_symptoms_id": patient_symptoms_id
             })
 
         return Response({

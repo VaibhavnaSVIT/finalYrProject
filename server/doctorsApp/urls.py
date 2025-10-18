@@ -10,7 +10,10 @@ from .views import (
     symptoms_assessment,
     doctor_dashboard,
     get_patient_notification,
-    get_image_requests
+    get_image_requests,
+    submit_image_recommendation,
+    submit_symptom_recommendation,
+    get_symptom_requests
 )
 
 urlpatterns = [
@@ -24,5 +27,8 @@ urlpatterns = [
     path("wrong-image-feedback/", wrong_image_feedback, name='wrong-image-feedback'),
     path("symptom-assessment/", symptoms_assessment, name='symptom-assessment'),
     path("get-patient-notifications/", get_patient_notification, name='get-patient-notifications'),
-    path("get-image-requests/", get_image_requests, name='get-image-requests')
+    path("get-image-requests/", get_image_requests, name='get-image-requests'),
+    path("submit-image-recommendation/", submit_image_recommendation, name='submit-image-recommendation'),
+    path("get-symptom-requests/", get_symptom_requests, name='get-symptom-requests'),
+    path("submit-symptom-recommendation/", submit_symptom_recommendation, name='submit-symptom-recommendation')
 ]

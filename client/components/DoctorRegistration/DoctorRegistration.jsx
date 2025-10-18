@@ -88,7 +88,7 @@ const DoctorRegistration = () => {
 
   const sendOTP = async () => {
     if (!formData.personal_info.email) {
-      alert("Please enter your email first.");
+      toast.error("Please enter your email first.");
       return;
     }
     try {
@@ -100,11 +100,11 @@ const DoctorRegistration = () => {
           email: formData.personal_info.email,
         }
       );
-      alert("OTP sent successfully to your email!");
+      toast.success("OTP sent successfully to your email!");
       setOtpSent(true);
     } catch (err) {
       console.error("Error sending OTP:", err);
-      alert("Failed to send OTP. Try again.");
+      toast.error("Failed to send OTP. Try again.");
     } finally {
       setOtpLoading(false);
     }
@@ -212,8 +212,8 @@ const DoctorRegistration = () => {
         );
 
         if (fileUploadRes.data.message) {
-          toast.success("Registration complete!");
           navigate("/doctor-login");
+          toast.success("Registration complete!");  
         } else {
           toast.error("File upload failed");
         }

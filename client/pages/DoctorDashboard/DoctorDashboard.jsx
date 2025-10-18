@@ -88,7 +88,7 @@ const DoctorDashboard = () => {
               title="View Recommended Medication"
               description="Access previous diagnoses and review suggested medication."
               cta="View"
-              onClick={() => navigate("/doctor-dashboard/results")}
+              onClick={() => navigate("/doctor-dashboard/requests")}
             />
           </section>
 
@@ -127,8 +127,8 @@ const DoctorDashboard = () => {
                   Get Results
                 </h3>
                 <p className="mt-1 text-sm text-gray-600">
-                  Predicts image and produces hardcoded medications.
-                  As doctor you can suggest medications.
+                  Predicts image and produces hardcoded medications. As doctor
+                  you can suggest medications.
                 </p>
               </div>
             </div>

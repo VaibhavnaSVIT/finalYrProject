@@ -114,7 +114,6 @@ const DoctorUploadImage = () => {
           },
         }
       );
-
       toast.success("Feedback submitted.");
       removeFile();
     } catch (err) {
@@ -124,8 +123,8 @@ const DoctorUploadImage = () => {
   };
 
   const domainSpecificOptions = {
-    skin_diseases: ["benign_keartosis_like_lesions", "eczema"],
-    oral_disorder: ["hypondontia", "mouth_ulcer"],
+    skin_diseases: ["benign_keratosis_like_lesions", "eczema"],
+    oral_disorder: ["hypodontia", "mouth_ulcer"],
   };
 
   return (

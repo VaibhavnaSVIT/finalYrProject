@@ -5,7 +5,7 @@ from rest_framework.response import Response
 from rest_framework.decorators import api_view, parser_classes
 from rest_framework.parsers import MultiPartParser, FormParser
 from rest_framework import status
-from db_connections import doctors_collection, doctors_otp_collection, doctors_medical_img_info, doctors_symptom_info, doctor_requests, patient_collection
+from db_connections import doctors_collection, doctors_otp_collection, doctors_medical_img_info, doctors_symptom_info, doctor_requests, patient_collection, patient_medical_img_info, patient_medical_info
 import bcrypt, jwt
 from rest_framework.exceptions import AuthenticationFailed
 
@@ -352,10 +352,13 @@ def wrong_image_feedback(request):
 
     if not file:
         return Response({"error": "Image file is required."}, status=status.HTTP_400_BAD_REQUEST)
+    
     if domain not in ["skin_diseases", "oral_disorder"]:
         return Response({"error": "Invalid or missing domain."}, status=status.HTTP_400_BAD_REQUEST)
+    
     if domain == "skin_diseases" and domain_specific not in ["benign_keratosis_like_lesions", "eczema"]:
         return Response({"error": "Invalid domain_specific for skin_diseases."}, status=status.HTTP_400_BAD_REQUEST)
+    
     if domain == "oral_disorder" and domain_specific not in ["hypodontia", "mouth_ulcer"]:
         return Response({"error": "Invalid domain_specific for oral_disorder."}, status=status.HTTP_400_BAD_REQUEST)
 
@@ -417,28 +420,42 @@ def wrong_image_feedback(request):
 def get_image_requests(request):
     try:
         token = request.headers.get('Authorization')
-
         if not token:
             raise AuthenticationFailed('Token missing')
         token = token.split(" ")[1]
         decoded_token = jwt.decode(token, settings.SECRET_KEY, algorithms=["HS256"])
         doctor_id = decoded_token.get('user_id')
-        patient_name = patient_collection.find_one()
         medication_map = {
             "eczema": "Topical corticosteroids and moisturizers (e.g., Hydrocortisone cream, CeraVe).",
             "benign keratosis like lesion": "Cryotherapy or salicylic acid for removal; monitor regularly.",
-            "mouth ulcers": "Topical benzocaine gel and vitamin B12 supplements.",
+            "mouth_ulcers": "Topical benzocaine gel and vitamin B12 supplements.",
             "hypodontia": "Dental prosthetics consultation; temporary use of dental wax for comfort.",
         }
 
-        records = doctor_requests.find({"doctor_id": doctor_id, "status": "pending", "type": "image"})
+        records = patient_medical_img_info.find({
+            "selected_doctor_id": doctor_id,
+            "analysis_type": "image",
+        })
+
         data = []
 
         for record in records:
-            label = record.get("model_prediction", {}).get("final_label", "")
-            confidence = record.get("model_prediction", {}).get("prediction_confidence", "")
-            medication = medication_map.get(label.lower(), "Low confidence on image, consult your doctor for appropriate treatment.")
+            patient_id = record.get("patient_id")
+            patient_name = "Unknown"
+
+            if patient_id:
+                patient = patient_collection.find_one({"patient_id": patient_id})
+                if patient:
+                    patient_name = patient.get("name", "Unknown")
+
+            model = record.get("model_prediction", {})
+            label = model.get("final_label", "")
+            print("label: ", label)
+            confidence = model.get("prediction_confidence", "")
+            medication = medication_map.get(label.lower())
+
             data.append({
+                "_id": str(record.get("_id")),
                 "file_name": record.get("file_name"),
                 "prediction": label,
                 "confidence": confidence,
@@ -446,8 +463,9 @@ def get_image_requests(request):
                 "doctor_name": record.get("selected_doctor_name"),
                 "doctor_recommendation": record.get("doctor_recommendation", None),
                 "img_uploaded": record.get("uploaded_at").date().isoformat() if record.get("uploaded_at") else None,
-                "patient_name": patient_name
+                "patient_name": patient_name,
             })
+
         return Response({"image_requests": data})
     except jwt.ExpiredSignatureError:
         return Response({"error": "Token expired."}, status=status.HTTP_401_UNAUTHORIZED)
@@ -455,6 +473,7 @@ def get_image_requests(request):
         return Response({"error": "Invalid token."}, status=status.HTTP_401_UNAUTHORIZED)
     except Exception as e:
         return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
 
 @api_view(["POST"])
 def symptoms_assessment(request):
@@ -534,7 +553,11 @@ def get_symptom_requests(request):
         token = token.split(" ")[1]
         decoded_token = jwt.decode(token, settings.SECRET_KEY, algorithms=["HS256"])
         doctor_id = decoded_token.get('user_id')
-        records = doctor_requests.find({"doctor_id": doctor_id, "status": "pending", "type": "symptoms"})
+
+        records = patient_medical_info.find({
+            "selected_doctor_id": doctor_id,
+            "analysis_type": "symptoms"
+        })
 
         data = []
         medication_map = {
@@ -582,24 +605,159 @@ def get_symptom_requests(request):
         }
 
         for record in records:
-            top_predictions = record.get("model_prediction", {}).get("top_predictions", [])
-            top_disease = top_predictions[0]["disease"] if top_predictions else None
-            top_confidence = top_predictions[0]["confidence"] if top_predictions else 0
+            patient_symptoms_id = record.get("patient_symptoms_id")
+            if not patient_symptoms_id:
+                continue 
 
+            symptom_info = patient_medical_info.find_one({"patient_symptoms_id": patient_symptoms_id})
+            if not symptom_info:
+                continue
+            symptoms = symptom_info.get("symptoms", [])
+            submitted_at = symptom_info.get("submitted_at")
+            model_prediction = symptom_info.get("model_prediction", {})
+            top_predictions = model_prediction.get("top_predictions", [])
 
-            if top_predictions and top_confidence < 20:
+            if top_predictions:
+                top_disease = top_predictions[0].get("disease")
+                top_confidence = top_predictions[0].get("confidence", 0)
+            else:
+                top_disease = None
+                top_confidence = 0
+            
+            if top_confidence < 20:
                 medications = "Low confidence on symptom prediction, consult your doctor for appropriate treatment."
             else:
                 medications = medication_map.get(top_disease, [])
 
+            patient_id = symptom_info.get("patient_id")
+            patient_doc = patient_collection.find_one({"patient_id": patient_id})
+            patient_name = patient_doc.get("name") if patient_doc else "Unknown"
+
             data.append({
-                "symptoms": record.get("symptoms", []),
+                "_id": str(record.get("_id")),
+                "symptoms": symptoms,
                 "top_predictions": top_predictions,
                 "hardcode_medication": medications,
-                "submitted_at": record.get("submitted_at").date().isoformat() if record.get("submitted_at") else None,
-                "patient_name": patient_name
+                "doctor_name": record.get("selected_doctor_name"),
+                "doctor_recommendation": record.get("doctor_recommendation", None),
+                "submitted_at": submitted_at.date().isoformat() if submitted_at else None,
+                "patient_name": patient_name,
             })
+
         return Response({"assessments": data}, status=status.HTTP_200_OK)
+
+    except jwt.ExpiredSignatureError:
+        return Response({"error": "Token expired."}, status=status.HTTP_401_UNAUTHORIZED)
+    except jwt.InvalidTokenError:
+        return Response({"error": "Invalid token."}, status=status.HTTP_401_UNAUTHORIZED)
+    except Exception as e:
+        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+@api_view(["POST"])
+def submit_image_recommendation(request):
+    try:
+        token = request.headers.get('Authorization')
+        if not token:
+            raise AuthenticationFailed('Token missing')
+        token = token.split(" ")[1]
+        decoded_token = jwt.decode(token, settings.SECRET_KEY, algorithms=["HS256"])
+        doctor_id = decoded_token.get('user_id')
+
+        print("data : ", request.data)
+        recommendation_text = request.data.get("recommendation")
+        patient_medical_img_id = request.data.get("patient_medical_img_id")
+
+        image_record = patient_medical_img_info.find_one({
+            "patient_medical_img_id": patient_medical_img_id,
+            "selected_doctor_id": doctor_id
+        })
+
+        if not image_record:
+            return Response(
+                {"error": "Image not found or unauthorized access"},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        result = patient_medical_img_info.update_one(
+            {"patient_medical_img_id": patient_medical_img_id},
+            {
+                "$set": {
+                    "doctor_recommendation": recommendation_text,
+                    "doc_verification_status": "completed"
+                }
+            }
+        )
+        doctor_requests.update_one(
+            {"patient_medical_img_id": patient_medical_img_id},
+            {"$set": {"status": "completed"}}
+        )
+        if result.modified_count == 1:
+            return Response(
+                {"message": "Image recommendation submitted successfully"},
+                status=status.HTTP_200_OK
+            )
+        else:
+            return Response(
+                {"error": "No update made or recommendation already submitted"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+    except jwt.ExpiredSignatureError:
+        return Response({"error": "Token expired."}, status=status.HTTP_401_UNAUTHORIZED)
+    except jwt.InvalidTokenError:
+        return Response({"error": "Invalid token."}, status=status.HTTP_401_UNAUTHORIZED)
+    except Exception as e:
+        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    
+@api_view(["POST"])
+def submit_symptom_recommendation(request):
+    try:
+        token = request.headers.get('Authorization')
+        if not token:
+            raise AuthenticationFailed('Token missing')
+        token = token.split(" ")[1]
+        decoded_token = jwt.decode(token, settings.SECRET_KEY, algorithms=["HS256"])
+        doctor_id = decoded_token.get('user_id')
+
+        recommendation_text = request.data.get("recommendation")
+        print("recomme: ", recommendation_text)
+        patient_symptoms_id = request.data.get("patient_symptoms_id")
+        print("patient symtpoms id: ", patient_symptoms_id)
+        print("doctor_id: ", doctor_id)
+
+        symptom_record = patient_medical_info.find_one({
+            "patient_symptoms_id": patient_symptoms_id,
+        })
+        print("symptom rec: ", symptom_record)
+
+        if not symptom_record:
+            print("not found")
+            return Response(
+                {"error": "Symptom not found or unauthorized access"},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        result = patient_medical_info.update_one(
+            {"patient_symptoms_id": patient_symptoms_id}, 
+            {"$set": {
+                "doctor_recommendation": recommendation_text,
+                "doc_verification_status": "completed"   
+            }})
+        
+        doctor_requests.update_one(
+            {"patient_symptoms_id": patient_symptoms_id},
+            {"$set": {"status": "completed"}}
+        )
+        
+        if result.modified_count == 1:
+            return Response(
+                {"message": "Symptom recommendation submitted successfully"},
+                status=status.HTTP_200_OK
+            )
+        else:
+            return Response(
+                {"error": "No update made or recommendation already submitted"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
 
     except jwt.ExpiredSignatureError:
         return Response({"error": "Token expired."}, status=status.HTTP_401_UNAUTHORIZED)
